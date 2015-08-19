@@ -4,6 +4,8 @@ Currently contains only a very minimal JSON schema validator using cheshire to p
 Supportes linked schemas with $ref and allows user to specify
 how linked URIs are resolved.
 
+[![Clojars Project](http://clojars.org/webjure/json-schema/latest-version.svg)](http://clojars.org/webjure/json-schema)
+
 ## Usage
 
 ```clojure
@@ -13,6 +15,6 @@ how linked URIs are resolved.
 
 ;;; then in some function
 (validate (cheshire/parse-string json-schema)
-	  (cheshire/parse-string json-data))
+          (cheshire/parse-string json-data))
 	  
 ```
