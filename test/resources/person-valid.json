@@ -1,0 +1,13 @@
+{"name": "Rolf Teflon",
+ "age": 33,
+ "contact": {
+     "address": {
+	 "streetAddress": "Some street 1",
+	 "city": "Localtown"
+     },
+     "phoneNumber": [
+	 {"location": "work", "code": 555222},
+	 {"location": "pager", "code": 666111}
+     ]
+ }
+}

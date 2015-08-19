@@ -1,0 +1,5 @@
+{"type": "object",
+ "properties": {"name": {"type": "string"},
+		"age": {"type": "integer"},
+		"contact": {"$ref": "test/resources/address-and-phone.schema.json"}}}
+

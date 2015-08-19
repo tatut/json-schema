@@ -1,0 +1,9 @@
+{"name": "Rolf Teflon",
+ "age": 33,
+ "contact": {
+     "address": {
+	 "streetAddress": "Some street 1",
+	 "city": "Localtown"
+     }
+ }
+}
