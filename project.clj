@@ -1,4 +1,4 @@
-(defproject webjure/json-schema "0.1-SNAPSHOT"
+(defproject webjure/json-schema "0.1"
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [cheshire "5.5.0"]]
 
