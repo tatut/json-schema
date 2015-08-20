@@ -33,7 +33,6 @@
                       ;; Draft 4 has separate required attribute with a list of property names
                       (into #{}
                             (get schema "required")))
-          _ (println "REQUIRED: " required?)
           errors (into
                   {}
                   (keep identity 
