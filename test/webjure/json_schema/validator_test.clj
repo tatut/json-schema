@@ -58,3 +58,29 @@
       (is (every? #(= :wrong-type (:error %))
                   (map #(validate s %)
                        ["foo" 42 [4 5] {"name" "Test"}]))))))
+
+(deftest validata-integer-bounds
+  (testing "integer bounds are checked"
+    (testing "non exclusive bounds work"
+      (let [s (cheshire/parse-string "{\"type\": \"integer\", \"minimum\": 1, \"maximum\": 10}")]
+        (testing "valid values return nil"
+          (is (every? nil?
+                      (map #(validate s %)
+                           (range 1 1)))))
+
+        (testing "too low values report error with minimum"
+          (is (= {:error :out-of-bounds :data 0 :minimum 1 :exclusive false}
+                 (validate s 0))))
+
+        (testing "too high values report error with maximum"
+          (is (= {:error :out-of-bounds :data 11 :maximum 10 :exclusive false}
+                 (validate s 11))))))
+    (testing "exclusive bounds works"
+      (let [s (cheshire/parse-string "{\"type\": \"integer\", \"minimum\": 1, \"maximum\": 10, \"exclusiveMinimum\": true, \"exclusiveMaximum\": true}")]
+        (is (nil? (validate s 2)))
+        (is (nil? (validate s 9)))
+        (is (= {:error :out-of-bounds :data 1 :minimum 1 :exclusive true}
+               (validate s 1)))
+        (is (= {:error :out-of-bounds :data 10 :maximum 10 :exclusive true}
+               (validate s 10)))))))
+

@@ -55,9 +55,37 @@
 
 
 (defmethod validate-by-type "integer"
-  [_ data _]
-  (when-not (integer? data)
-    {:error :wrong-type :expected :integer :data data}))
+  [{min "minimum" max "maximum"
+    exclusive-min "exclusiveMinimum"
+    exclusive-max "exclusiveMaximum"} data _]
+  (if-not (integer? data)
+    {:error :wrong-type :expected :integer :data data}
+    (cond
+      (and min exclusive-min (<= data min))
+      {:error :out-of-bounds
+       :data data
+       :minimum min
+       :exclusive true}
+      
+      (and min (< data min))
+      {:error :out-of-bounds
+       :data data
+       :minimum min
+       :exclusive false}
+      
+      (and max exclusive-max (>= data max))
+      {:error :out-of-bounds
+       :data data
+       :maximum max
+       :exclusive true}
+
+      (and max (> data max))
+      {:error :out-of-bounds
+       :data data
+       :maximum max
+       :exclusive false}
+
+      :default nil)))
 
 (defmethod validate-by-type "string"
   [{enum "enum"} data _]
