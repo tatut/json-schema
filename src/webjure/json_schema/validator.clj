@@ -22,8 +22,18 @@
     [{:error :wrong-type :expected :map
       :data data}]
 
-    (let [required? (into #{}
-                          (get schema "required"))
+    (let [required? (if (:draft3-required options)
+                      ;; Draft 3 required is an attribute of the property schema
+                      (into #{}
+                            (keep (fn [[property-name property-schema]]
+                                    (when (get property-schema "required")
+                                      property-name))
+                                  properties))
+
+                      ;; Draft 4 has separate required attribute with a list of property names
+                      (into #{}
+                            (get schema "required")))
+          _ (println "REQUIRED: " required?)
           errors (into
                   {}
                   (keep identity 
@@ -53,39 +63,47 @@
             ;; No errors
             nil))))))
 
+(defn validate-number-bounds [{min "minimum" max "maximum"
+                               exclusive-min "exclusiveMinimum"
+                               exclusive-max "exclusiveMaximum"} data]
+  (cond
+    (and min exclusive-min (<= data min))
+    {:error :out-of-bounds
+     :data data
+     :minimum min
+     :exclusive true}
+    
+    (and min (< data min))
+    {:error :out-of-bounds
+     :data data
+     :minimum min
+     :exclusive false}
+    
+    (and max exclusive-max (>= data max))
+    {:error :out-of-bounds
+     :data data
+     :maximum max
+     :exclusive true}
+
+    (and max (> data max))
+    {:error :out-of-bounds
+     :data data
+     :maximum max
+     :exclusive false}
+
+    :default nil))
 
 (defmethod validate-by-type "integer"
-  [{min "minimum" max "maximum"
-    exclusive-min "exclusiveMinimum"
-    exclusive-max "exclusiveMaximum"} data _]
+  [schema data _]
   (if-not (integer? data)
     {:error :wrong-type :expected :integer :data data}
-    (cond
-      (and min exclusive-min (<= data min))
-      {:error :out-of-bounds
-       :data data
-       :minimum min
-       :exclusive true}
-      
-      (and min (< data min))
-      {:error :out-of-bounds
-       :data data
-       :minimum min
-       :exclusive false}
-      
-      (and max exclusive-max (>= data max))
-      {:error :out-of-bounds
-       :data data
-       :maximum max
-       :exclusive true}
+    (validate-number-bounds schema data)))
 
-      (and max (> data max))
-      {:error :out-of-bounds
-       :data data
-       :maximum max
-       :exclusive false}
-
-      :default nil)))
+(defmethod validate-by-type "number"
+  [schema data _]
+  (if-not (number? data)
+    {:error :wrong-type :expected :number :data data}
+    (validate-number-bounds schema data)))
 
 (defmethod validate-by-type "string"
   [{enum "enum"} data _]
@@ -131,7 +149,10 @@
   An map of options can be given that supports the keys:
   :ref-resolver    Function for loading referenced schemas. Takes in 
                    the schema URI and must return the schema parsed form.
-                   Default just tries to read it as a file via slurp and parse."
+                   Default just tries to read it as a file via slurp and parse.
+
+  :draft3-required  when set to true, support draft3 style required (in property definition),
+                    defaults to false"
   ([schema data] (validate schema data {:ref-resolver resolve-ref}))
   ([schema data options]
    (if-let [ref (get schema "$ref")]

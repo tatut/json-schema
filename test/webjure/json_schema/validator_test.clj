@@ -59,7 +59,7 @@
                   (map #(validate s %)
                        ["foo" 42 [4 5] {"name" "Test"}]))))))
 
-(deftest validata-integer-bounds
+(deftest validate-integer-bounds
   (testing "integer bounds are checked"
     (testing "non exclusive bounds work"
       (let [s (cheshire/parse-string "{\"type\": \"integer\", \"minimum\": 1, \"maximum\": 10}")]
@@ -84,3 +84,21 @@
         (is (= {:error :out-of-bounds :data 10 :maximum 10 :exclusive true}
                (validate s 10)))))))
 
+(deftest validate-draft3-requires
+  (let [s (cheshire/parse-string (str "{\"type\": \"object\", \"properties\": "
+                                      "{\"name\": {\"type\": \"string\", \"required\": true}, "
+                                      "\"age\": {\"type\": \"integer\"}}}"))]
+    (is (nil? (validate s (cheshire/parse-string "{\"name\": \"Test\"}") {:draft3-required true})))
+    (is (= {:error :properties
+            :data {"age" 42}
+            :properties {"name" {:error :missing-property}}}
+           (validate s (cheshire/parse-string "{\"age\": 42}") {:draft3-required true})))))
+
+(deftest validate-number
+  (is (nil? (validate (cheshire/parse-string "{\"type\": \"number\"}")
+                      3.33)))
+  (is (= {:error :wrong-type
+          :expected :number
+          :data "foo"}
+         (validate (cheshire/parse-string "{\"type\": \"number\"}")
+                   "foo"))))
