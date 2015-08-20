@@ -40,6 +40,13 @@
                        [:properties "contact" :properties "phoneNumber" :error]))))
       )))
 
-
+(deftest validate-enum
+  (testing "enum values are checked"
+    (let [s (cheshire/parse-string  "{\"type\": \"string\", \"enum\": [\"foo\", \"bar\"]}")]
+      (is (nil? (validate s "foo")))
+      (is (= {:error :invalid-enum-value
+              :data "xuxu"
+              :allowed-values #{"foo" "bar"}}
+             (validate s "xuxu"))))))
 
   

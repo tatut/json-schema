@@ -60,9 +60,15 @@
     {:error :wrong-type :expected :integer :data data}))
 
 (defmethod validate-by-type "string"
-  [_ data _]
-  (when-not (string? data)
-    {:error :wrong-type :expected :string :data data}))
+  [{enum "enum"} data _]
+  (if-not (string? data)
+    {:error :wrong-type :expected :string :data data}
+    (when enum
+      (let [allowed-values (into #{} enum)]
+        (when-not (allowed-values data)
+          {:error :invalid-enum-value
+           :data data
+           :allowed-values allowed-values})))))
 
 (defmethod validate-by-type "array"
   [{item-schema "items"} data options]
