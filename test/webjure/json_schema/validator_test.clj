@@ -49,4 +49,12 @@
               :allowed-values #{"foo" "bar"}}
              (validate s "xuxu"))))))
 
-  
+
+(deftest validate-boolean
+  (testing "boolean values are checked"
+    (let [s (cheshire/parse-string "{\"type\": \"boolean\"}")]
+      (is (nil? (validate s true)))
+      (is (nil? (validate s false)))
+      (is (every? #(= :wrong-type (:error %))
+                  (map #(validate s %)
+                       ["foo" 42 [4 5] {"name" "Test"}]))))))

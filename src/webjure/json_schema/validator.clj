@@ -91,6 +91,11 @@
                  (inc i)
                  items))))))
 
+(defmethod validate-by-type "boolean"
+  [_ data _]
+  (when (nil? (#{true false} data))
+    {:error :wrong-type :expected :boolean :data data}))
+
 (defn validate
   "Validate the given data with the given schema. Both must be in Clojure format with string keys.
   Returns nil on an error description map.
