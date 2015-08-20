@@ -104,16 +104,19 @@
     {:error :wrong-type :expected :number :data data}
     (validate-number-bounds schema data)))
 
+(defn validate-enum-value
+  [{enum "enum"} data]
+  (when enum
+    (let [allowed-values (into #{} enum)]
+      (when-not (allowed-values data)
+        {:error :invalid-enum-value
+         :data data
+         :allowed-values allowed-values}))))
+  
 (defmethod validate-by-type "string"
-  [{enum "enum"} data _]
-  (if-not (string? data)
-    {:error :wrong-type :expected :string :data data}
-    (when enum
-      (let [allowed-values (into #{} enum)]
-        (when-not (allowed-values data)
-          {:error :invalid-enum-value
-           :data data
-           :allowed-values allowed-values})))))
+  [_ data _]
+  (when-not (string? data)
+    {:error :wrong-type :expected :string :data data}))
 
 (defmethod validate-by-type "array"
   [{item-schema "items"} data options]
@@ -141,6 +144,11 @@
   (when (nil? (#{true false} data))
     {:error :wrong-type :expected :boolean :data data}))
 
+(defmethod validate-by-type :default
+  [schema data _]
+  ;; If no type is specified, anything goes
+  nil)
+
 (defn validate
   "Validate the given data with the given schema. Both must be in Clojure format with string keys.
   Returns nil on an error description map.
@@ -160,7 +168,9 @@
          {:error :unable-to-resolve-referenced-schema
           :schema-uri ref}
          (validate referenced-schema data options)))
-     (validate-by-type schema data options))))
+
+     (or (validate-enum-value schema data)
+         (validate-by-type schema data options)))))
   
   
 
