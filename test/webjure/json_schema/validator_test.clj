@@ -107,7 +107,6 @@
         json (cheshire/parse-string "{\"things\" : [\"value\", \"value\"] }")
         errors (validate schema json {:draft3-required true})
         expected-errors {:error :properties, :data {"things" ["value" "value"]}, :properties {"things" {:error :wrong-number-of-elements, :minimum 3, :actual 2}}}]
-    (println errors)
     (is (= expected-errors errors))))
 
 (deftest validate-maximum-number-of-items
@@ -115,5 +114,17 @@
         json (cheshire/parse-string "{\"things\" : [\"value\", \"value\", \"value\", \"value\", \"value\"] }")
         errors (validate schema json {:draft3-required true})
         expected-errors {:error :properties, :data {"things" ["value" "value" "value" "value" "value"]}, :properties {"things" {:error :wrong-number-of-elements, :maximum 4, :actual 5}}}]
-    (println errors)
     (is (= expected-errors errors))))
+
+(deftest validate-unique-items
+  (let [schema (cheshire/parse-string "{\"type\" : \"object\", \"properties\" : {\"things\" : {\"type\" : \"array\", \"items\" : {\"type\" : \"string\" }, \"minItems\" : 3, \"maxItems\" : 4, \"uniqueItems\": true } } }")
+        json (cheshire/parse-string "{\"things\" : [\"value\", \"value\", \"value\", \"value\"] }")
+        errors (validate schema json {:draft3-required true})
+        expected-errors {:error :properties, :data {"things" ["value" "value" "value" "value"]}, :properties {"things" {:error :duplicate-items-not-allowed}}}]
+    (is (= expected-errors errors))))
+
+(deftest validate-valid-array
+  (let [schema (cheshire/parse-string "{\"type\" : \"object\", \"properties\" : {\"things\" : {\"type\" : \"array\", \"items\" : {\"type\" : \"string\" }, \"minItems\" : 3, \"maxItems\" : 4, \"uniqueItems\": true } } }")
+        json (cheshire/parse-string "{\"things\" : [\"first\", \"second\", \"third\"] }")
+        errors (validate schema json {:draft3-required true})]
+    (is (nil? errors))))

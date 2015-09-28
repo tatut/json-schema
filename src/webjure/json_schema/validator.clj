@@ -138,27 +138,20 @@
 
 (defmethod validate-by-type "array"
   [schema data options]
-  (println "Validate array!!!")
-  (println "Schema: " schema)
-
-
   (if-not (sequential? data)
     {:error :wrong-type :expected :array-like :data data}
     (do
       (let [min-items (get schema "minItems")
             max-items (get schema "maxItems")
-            item-schema (get schema "items")]
-
-        (println "MIN:" min-items)
-        (println "MAX:" max-items)
-        (println "Item schema:" item-schema)
-        (println "DATA:" data)
-
-        (if (> min-items (count data))
+            item-schema (get schema "items")
+            uniqueItems (get schema "uniqueItems")]
+        (if (and min-items (> min-items (count data)))
           {:error :wrong-number-of-elements :minimum min-items :actual (count data)}
-          (if (< max-items  (count data))
+          (if (and max-items (< max-items (count data)))
             {:error :wrong-number-of-elements :maximum max-items :actual (count data)}
-            (validate-array-items options item-schema data)))))))
+            (if (and uniqueItems (not= (count data) (count (into #{} data))))
+              {:error :duplicate-items-not-allowed}
+              (validate-array-items options item-schema data))))))))
 
 (defmethod validate-by-type "boolean"
   [_ data _]
@@ -175,7 +168,7 @@
   Returns nil on an error description map.
 
   An map of options can be given that supports the keys:
-  :ref-resolver    Function for loading referenced schemas. Takes in 
+  :ref-resolver    Function for loading referenced schemas. Takes in
                    the schema URI and must return the schema parsed form.
                    Default just tries to read it as a file via slurp and parse.
 
