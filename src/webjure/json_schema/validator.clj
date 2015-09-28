@@ -138,24 +138,22 @@
     {:error :wrong-type :expected :string :data data}
     (let [format (get schema "format")]
       (when (and format (= format "date-time") (nil? (time/from-string data)))
-        {:error :wrong-type :expected :date :data data}))))
+        {:error :wrong-format :expected :date-time :data data}))))
 
 (defmethod validate-by-type "array"
   [schema data options]
   (if-not (sequential? data)
     {:error :wrong-type :expected :array-like :data data}
-    (do
-      (let [min-items (get schema "minItems")
-            max-items (get schema "maxItems")
-            item-schema (get schema "items")
-            uniqueItems (get schema "uniqueItems")]
-        (if (and min-items (> min-items (count data)))
-          {:error :wrong-number-of-elements :minimum min-items :actual (count data)}
-          (if (and max-items (< max-items (count data)))
-            {:error :wrong-number-of-elements :maximum max-items :actual (count data)}
-            (if (and uniqueItems (not= (count data) (count (into #{} data))))
-              {:error :duplicate-items-not-allowed}
-              (validate-array-items options item-schema data))))))))
+    (let [min-items (get schema "minItems")
+          max-items (get schema "maxItems")
+          item-schema (get schema "items")
+          uniqueItems (get schema "uniqueItems")
+          items (count data)]
+
+      (cond (and min-items (> min-items items)) {:error :wrong-number-of-elements :minimum min-items :actual items}
+            (and max-items (< max-items items)) {:error :wrong-number-of-elements :maximum max-items :actual items}
+            (and uniqueItems (not= items (count (into #{} data)))) {:error :duplicate-items-not-allowed}
+            :else (validate-array-items options item-schema data)))))
 
 (defmethod validate-by-type "boolean"
   [_ data _]

@@ -142,6 +142,6 @@
         expected-errors {:data       {"date" "foo"}
                          :error      :properties
                          :properties {"date" {:data     "foo"
-                                              :error    :wrong-type
-                                              :expected :date}}}]
+                                              :error    :wrong-format
+                                              :expected :date-time}}}]
     (is (= expected-errors errors))))
