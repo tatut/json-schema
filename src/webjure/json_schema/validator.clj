@@ -9,18 +9,18 @@
   (let [schema (io/file uri)]
     (when (.canRead schema)
       (cheshire/parse-string (slurp schema)))))
-       
+
 (defmulti validate-by-type
-  "Validate JSON schema item by type. Returns a sequence of errors."
-  (fn [schema data options] (get schema "type")))
+          "Validate JSON schema item by type. Returns a sequence of errors."
+          (fn [schema data options] (get schema "type")))
 
 (defmethod validate-by-type "object"
   [{properties "properties"
-    :as schema} data options]
-  
+    :as        schema} data options]
+
   (if-not (map? data)
     [{:error :wrong-type :expected :map
-      :data data}]
+      :data  data}]
 
     (let [required? (if (:draft3-required options)
                       ;; Draft 3 required is an attribute of the property schema
@@ -34,19 +34,19 @@
                       (into #{}
                             (get schema "required")))
           errors (into
-                  {}
-                  (keep identity 
-                        (for [[property-name property-schema] properties
-                              :let [property-value (get data property-name)]]
-                          (if (and (nil? property-value)
-                                   (required? property-name))
-                            [property-name {:error :missing-property}]
-                            (when property-value
-                              (when-let [error (validate property-schema property-value options)]
-                                [property-name error]))))))]
+                   {}
+                   (keep identity
+                         (for [[property-name property-schema] properties
+                               :let [property-value (get data property-name)]]
+                           (if (and (nil? property-value)
+                                    (required? property-name))
+                             [property-name {:error :missing-property}]
+                             (when property-value
+                               (when-let [error (validate property-schema property-value options)]
+                                 [property-name error]))))))]
       (if-not (empty? errors)
-        {:error :properties
-         :data data
+        {:error      :properties
+         :data       data
          :properties errors}
 
         (let [property-names (into #{} (map first properties))
@@ -56,41 +56,59 @@
           (if-not (empty? extra-properties)
             ;; We have properties outside the schema, error
             ;; FIXME: check additionalProperties flag
-            {:error :additional-properties
+            {:error          :additional-properties
              :property-names extra-properties}
 
             ;; No errors
             nil))))))
 
-(defn validate-number-bounds [{min "minimum" max "maximum"
+(defn validate-number-bounds [{min           "minimum" max "maximum"
                                exclusive-min "exclusiveMinimum"
                                exclusive-max "exclusiveMaximum"} data]
   (cond
     (and min exclusive-min (<= data min))
-    {:error :out-of-bounds
-     :data data
-     :minimum min
+    {:error     :out-of-bounds
+     :data      data
+     :minimum   min
      :exclusive true}
-    
+
     (and min (< data min))
-    {:error :out-of-bounds
-     :data data
-     :minimum min
+    {:error     :out-of-bounds
+     :data      data
+     :minimum   min
      :exclusive false}
-    
+
     (and max exclusive-max (>= data max))
-    {:error :out-of-bounds
-     :data data
-     :maximum max
+    {:error     :out-of-bounds
+     :data      data
+     :maximum   max
      :exclusive true}
 
     (and max (> data max))
-    {:error :out-of-bounds
-     :data data
-     :maximum max
+    {:error     :out-of-bounds
+     :data      data
+     :maximum   max
      :exclusive false}
 
     :default nil))
+
+(defn validate-array-items [options item-schema data]
+  (loop [errors []
+         i 0
+         [item & items] data]
+    (if-not item
+      (if (empty? errors)
+        nil
+        {:error :array-items
+         :data  data
+         :items errors})
+      (let [item-error (validate-by-type item-schema item options)]
+        (recur (if item-error
+                 (conj errors (assoc item-error
+                                :position i))
+                 errors)
+               (inc i)
+               items)))))
 
 (defmethod validate-by-type "integer"
   [schema data _]
@@ -109,35 +127,38 @@
   (when enum
     (let [allowed-values (into #{} enum)]
       (when-not (allowed-values data)
-        {:error :invalid-enum-value
-         :data data
+        {:error          :invalid-enum-value
+         :data           data
          :allowed-values allowed-values}))))
-  
+
 (defmethod validate-by-type "string"
   [_ data _]
   (when-not (string? data)
     {:error :wrong-type :expected :string :data data}))
 
 (defmethod validate-by-type "array"
-  [{item-schema "items"} data options]
+  [schema data options]
+  (println "Validate array!!!")
+  (println "Schema: " schema)
+
+
   (if-not (sequential? data)
     {:error :wrong-type :expected :array-like :data data}
-    (loop [errors []
-           i 0
-           [item & items] data]
-      (if-not item
-        (if (empty? errors)
-          nil
-          {:error :array-items
-           :data data
-           :items errors})
-        (let [item-error (validate-by-type item-schema item options)]
-          (recur (if item-error
-                   (conj errors (assoc item-error
-                                  :position i))
-                   errors)
-                 (inc i)
-                 items))))))
+    (do
+      (let [min-items (get schema "minItems")
+            max-items (get schema "maxItems")
+            item-schema (get schema "items")]
+
+        (println "MIN:" min-items)
+        (println "MAX:" max-items)
+        (println "Item schema:" item-schema)
+        (println "DATA:" data)
+
+        (if (> min-items (count data))
+          {:error :wrong-number-of-elements :minimum min-items :actual (count data)}
+          (if (< max-items  (count data))
+            {:error :wrong-number-of-elements :maximum max-items :actual (count data)}
+            (validate-array-items options item-schema data)))))))
 
 (defmethod validate-by-type "boolean"
   [_ data _]
@@ -165,7 +186,7 @@
    (if-let [ref (get schema "$ref")]
      (let [referenced-schema ((:ref-resolver options) ref)]
        (if-not referenced-schema
-         {:error :unable-to-resolve-referenced-schema
+         {:error      :unable-to-resolve-referenced-schema
           :schema-uri ref}
          (validate referenced-schema data options)))
 
