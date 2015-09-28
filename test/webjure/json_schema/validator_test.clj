@@ -128,3 +128,20 @@
         json (cheshire/parse-string "{\"things\" : [\"first\", \"second\", \"third\"] }")
         errors (validate schema json {:draft3-required true})]
     (is (nil? errors))))
+
+(deftest validate-valid-date
+  (let [schema (cheshire/parse-string "{\"type\": \"object\",\"properties\": {\"date\": {\"id\": \"http://jsonschema.net/date\",\"type\": \"string\",\"format\": \"date-time\"}}}")
+        json (cheshire/parse-string "{\"date\": \"2015-01-30T12:00:00Z\"}")
+        errors (validate schema json {:draft3-required true})]
+    (is (nil? errors))))
+
+(deftest validate-invalid-date
+  (let [schema (cheshire/parse-string "{\"type\": \"object\",\"properties\": {\"date\": {\"id\": \"http://jsonschema.net/date\",\"type\": \"string\",\"format\": \"date-time\"}}}")
+        json (cheshire/parse-string "{\"date\": \"foo\"}")
+        errors (validate schema json {:draft3-required true})
+        expected-errors {:data       {"date" "foo"}
+                         :error      :properties
+                         :properties {"date" {:data     "foo"
+                                              :error    :wrong-type
+                                              :expected :date}}}]
+    (is (= expected-errors errors))))

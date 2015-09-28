@@ -1,7 +1,8 @@
 (ns webjure.json-schema.validator
   "Validator for JSON schema for draft 4"
   (:require [cheshire.core :as cheshire]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clj-time.coerce :as time]))
 
 (declare validate)
 
@@ -132,9 +133,12 @@
          :allowed-values allowed-values}))))
 
 (defmethod validate-by-type "string"
-  [_ data _]
-  (when-not (string? data)
-    {:error :wrong-type :expected :string :data data}))
+  [schema data _]
+  (if (not (string? data))
+    {:error :wrong-type :expected :string :data data}
+    (let [format (get schema "format")]
+      (when (and format (= format "date-time") (nil? (time/from-string data)))
+        {:error :wrong-type :expected :date :data data}))))
 
 (defmethod validate-by-type "array"
   [schema data options]
