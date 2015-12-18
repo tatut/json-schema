@@ -141,6 +141,11 @@
                             :position 1}]
                    }))))
 
+(deftest validate-enum-array-ok
+  (let [schema (cheshire/parse-string "{\"type\": \"array\", \"items\": {\"enum\": [\"foo\",\"bar\"]}}")
+        json (cheshire/parse-string "[\"foo\", \"bar\"]")
+        errors (validate schema json {:draft3-required true})]
+    (is (nil? errors))))
 
 (deftest validate-valid-date
   (let [schema (cheshire/parse-string "{\"type\": \"object\",\"properties\": {\"date\": {\"id\": \"http://jsonschema.net/date\",\"type\": \"string\",\"format\": \"date-time\"}}}")
