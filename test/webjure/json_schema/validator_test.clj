@@ -129,6 +129,24 @@
         errors (validate schema json {:draft3-required true})]
     (is (nil? errors))))
 
+(deftest validate-enum-array
+  (let [schema (cheshire/parse-string "{\"type\": \"array\", \"items\": {\"enum\": [\"foo\",\"bar\"]}}")
+        json (cheshire/parse-string "[\"foo\", \"kek\"]")
+        errors (validate schema json {:draft3-required true})]
+    (is (= errors {:error    :array-items
+                   :data     ["foo" "kek"]
+                   :items [{:error :invalid-enum-value
+                            :data "kek"
+                            :allowed-values #{"foo" "bar"}
+                            :position 1}]
+                   }))))
+
+(deftest validate-enum-array-ok
+  (let [schema (cheshire/parse-string "{\"type\": \"array\", \"items\": {\"enum\": [\"foo\",\"bar\"]}}")
+        json (cheshire/parse-string "[\"foo\", \"bar\"]")
+        errors (validate schema json {:draft3-required true})]
+    (is (nil? errors))))
+
 (deftest validate-valid-date
   (let [schema (cheshire/parse-string "{\"type\": \"object\",\"properties\": {\"date\": {\"id\": \"http://jsonschema.net/date\",\"type\": \"string\",\"format\": \"date-time\"}}}")
         json (cheshire/parse-string "{\"date\": \"2015-01-30T12:00:00Z\"}")
