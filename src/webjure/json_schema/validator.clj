@@ -93,6 +93,8 @@
 
     :default nil))
 
+(declare validate-enum-value)
+
 (defn validate-array-items [options item-schema data]
   (loop [errors []
          i 0
@@ -103,10 +105,12 @@
         {:error :array-items
          :data  data
          :items errors})
-      (let [item-error (validate-by-type item-schema item options)]
+      (let [item-error (if (and (map? item-schema) (item-schema "enum"))
+                         (validate-enum-value item-schema item)
+                         (validate-by-type item-schema item options))]
         (recur (if item-error
                  (conj errors (assoc item-error
-                                :position i))
+                                     :position i))
                  errors)
                (inc i)
                items)))))
