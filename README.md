@@ -8,6 +8,8 @@ how linked URIs are resolved.
 
 ## Usage
 
+The function version (runtime loading of schema):
+
 ```clojure
 (ns my.app
   (:require [webjure.json-schema.validator :refer [validate]]
@@ -16,5 +18,20 @@ how linked URIs are resolved.
 ;;; then in some function
 (validate (cheshire/parse-string json-schema)
           (cheshire/parse-string json-data))
-	  
+
+```
+
+Macro version loads and parses the schema and generates the validation function at compile time.
+The returned errors are exactly the same as in the runtime version.
+
+```clojure
+(ns my.app
+  (:require [webjure.json-schema.validator.macro :refer [make-validator]]
+            [cheshire.core :as cheshire]))
+
+(def my-schema-validator
+     (make-validator (cheshire/parse-string json-schema) {}))
+
+;; Then in some function
+(my-schema-validator (cheshire/parse-string json-data))
 ```
