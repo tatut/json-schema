@@ -1,6 +1,7 @@
 (ns webjure.json-schema.validator-test
   (:require [clojure.test :refer [deftest testing is]]
             [webjure.json-schema.validator :refer [validate]]
+            [webjure.json-schema.validator.macro :refer [make-validator]]
             [cheshire.core :as cheshire]))
 
 
@@ -9,14 +10,32 @@
        (str "test/resources/")
        slurp cheshire/parse-string))
 
+;; Define a macro that defines a new validator function.
+;; The function calls both the function style validation and
+;; the generated macro version and verifies that they validate
+;; errors in the same way.
+(defmacro defvalidate [name schema & opts]
+  (let [schema (if (string? schema)
+                 (p schema)
+                 schema)
+        opts (or (first opts) {})]
+    `(defn ~name [data#]
+       (let [fn-res# (validate ~schema data# ~opts)
+             macro-res# ((make-validator ~schema ~opts) data#)]
+         (is (= fn-res# macro-res#)
+             "function and macro versions validate in the same way")
+         fn-res#))))
+
+(defvalidate address-and-phone "address-and-phone.schema.json")
+
 (deftest validate-address-and-phone
   (testing "jsonschema.net example schema"
     (let [s (p "address-and-phone.schema.json")]
       (testing "valid json returns nil errors"
-        (is (nil? (validate s (p "address-and-phone-valid.json")))))
+        (is (nil? (address-and-phone (p "address-and-phone-valid.json")))))
 
       (testing "missing property error is reported"
-        (let [e (validate s (p "address-and-phone-city-and-code-missing.json"))]
+        (let [e (address-and-phone (p "address-and-phone-city-and-code-missing.json"))]
           (is (= :properties (:error e)))
           ;; "city" is reported as missing because it is required
           (is (= :missing-property (get-in e [:properties "address" :properties "city" :error])))
@@ -27,136 +46,159 @@
       (testing "additional properties are reported"
         (is (= {:error          :additional-properties
                 :property-names #{"youDidntExpectMe" "orMe"}}
-               (validate s (p "address-and-phone-additional-properties.json"))))))))
+               (address-and-phone (p "address-and-phone-additional-properties.json"))))))))
 
+(defvalidate ref-schema "person.schema.json")
 (deftest validate-referenced-schema
   (testing "person schema that links to address and phone schema"
     (let [s (p "person.schema.json")]
       (testing "valid json returns nil errors"
-        (is (nil? (validate s (p "person-valid.json")))))
+        (is (nil? (ref-schema (p "person-valid.json")))))
       (testing "linked schema errors are reported"
         (is (= :missing-property
-               (get-in (validate s (p "person-invalid.json"))
+               (get-in (ref-schema (p "person-invalid.json"))
                        [:properties "contact" :properties "phoneNumber" :error])))))))
 
+(defvalidate valid-enum {"type" "string" "enum" ["foo" "bar"]})
 (deftest validate-enum
   (testing "enum values are checked"
-    (let [s (cheshire/parse-string "{\"type\": \"string\", \"enum\": [\"foo\", \"bar\"]}")]
-      (is (nil? (validate s "foo")))
-      (is (= {:error          :invalid-enum-value
-              :data           "xuxu"
-              :allowed-values #{"foo" "bar"}}
-             (validate s "xuxu"))))))
+    (is (nil? (valid-enum "foo")))
+    (is (= {:error          :invalid-enum-value
+            :data           "xuxu"
+            :allowed-values #{"foo" "bar"}}
+           (valid-enum "xuxu")))))
 
 
+(defvalidate bool {"type" "boolean"})
 (deftest validate-boolean
   (testing "boolean values are checked"
-    (let [s (cheshire/parse-string "{\"type\": \"boolean\"}")]
-      (is (nil? (validate s true)))
-      (is (nil? (validate s false)))
-      (is (every? #(= :wrong-type (:error %))
-                  (map #(validate s %)
-                       ["foo" 42 [4 5] {"name" "Test"}]))))))
+    (is (nil? (bool true)))
+    (is (nil? (bool false)))
+    (is (every? #(= :wrong-type (:error %))
+                (map #(bool %)
+                     ["foo" 42 [4 5] {"name" "Test"}])))))
+
+(defvalidate validate-integer {"type" "integer" "minimum" 1 "maximum" 10})
+(defvalidate validate-integer-excl {"type" "integer"
+                                    "minimum" 1
+                                    "maximum" 10
+                                    "exclusiveMinimum" true
+                                    "exclusiveMaximum" true})
 
 (deftest validate-integer-bounds
   (testing "integer bounds are checked"
     (testing "non exclusive bounds work"
-      (let [s (cheshire/parse-string "{\"type\": \"integer\", \"minimum\": 1, \"maximum\": 10}")]
-        (testing "valid values return nil"
-          (is (every? nil?
-                      (map #(validate s %)
-                           (range 1 1)))))
+      (testing "valid values return nil"
+        (is (every? nil?
+                    (map #(validate-integer %)
+                         (range 1 1)))))
 
-        (testing "too low values report error with minimum"
-          (is (= {:error :out-of-bounds :data 0 :minimum 1 :exclusive false}
-                 (validate s 0))))
+      (testing "too low values report error with minimum"
+        (is (= {:error :out-of-bounds :data 0 :minimum 1 :exclusive false}
+               (validate-integer 0))))
 
-        (testing "too high values report error with maximum"
-          (is (= {:error :out-of-bounds :data 11 :maximum 10 :exclusive false}
-                 (validate s 11))))))
+      (testing "too high values report error with maximum"
+        (is (= {:error :out-of-bounds :data 11 :maximum 10 :exclusive false}
+               (validate-integer 11)))))
     (testing "exclusive bounds works"
-      (let [s (cheshire/parse-string "{\"type\": \"integer\", \"minimum\": 1, \"maximum\": 10, \"exclusiveMinimum\": true, \"exclusiveMaximum\": true}")]
-        (is (nil? (validate s 2)))
-        (is (nil? (validate s 9)))
-        (is (= {:error :out-of-bounds :data 1 :minimum 1 :exclusive true}
-               (validate s 1)))
-        (is (= {:error :out-of-bounds :data 10 :maximum 10 :exclusive true}
-               (validate s 10)))))))
+      (is (nil? (validate-integer-excl 2)))
+      (is (nil? (validate-integer-excl 9)))
+      (is (= {:error :out-of-bounds :data 1 :minimum 1 :exclusive true}
+             (validate-integer-excl 1)))
+      (is (= {:error :out-of-bounds :data 10 :maximum 10 :exclusive true}
+             (validate-integer-excl 10))))))
+
+(defvalidate draft3-requires {"type" "object"
+                              "properties" {"name" {"type" "string"
+                                                    "required" true}
+                                            "age" {"type" "integer"}}}
+  {:draft3-required true})
 
 (deftest validate-draft3-requires
-  (let [s (cheshire/parse-string (str "{\"type\": \"object\", \"properties\": "
-                                      "{\"name\": {\"type\": \"string\", \"required\": true}, "
-                                      "\"age\": {\"type\": \"integer\"}}}"))]
-    (is (nil? (validate s (cheshire/parse-string "{\"name\": \"Test\"}") {:draft3-required true})))
-    (is (= {:error      :properties
-            :data       {"age" 42}
-            :properties {"name" {:error :missing-property}}}
-           (validate s (cheshire/parse-string "{\"age\": 42}") {:draft3-required true})))))
+  (is (nil? (draft3-requires (cheshire/parse-string "{\"name\": \"Test\"}") )))
+  (is (= {:error      :properties
+          :data       {"age" 42}
+          :properties {"name" {:error :missing-property}}}
+         (draft3-requires (cheshire/parse-string "{\"age\": 42}")))))
 
+(defvalidate num {"type" "number"})
 (deftest validate-number
-  (is (nil? (validate (cheshire/parse-string "{\"type\": \"number\"}")
-                      3.33)))
+  (is (nil? (num 3.33)))
   (is (= {:error    :wrong-type
           :expected :number
           :data     "foo"}
-         (validate (cheshire/parse-string "{\"type\": \"number\"}")
-                   "foo"))))
+         (num "foo"))))
+
+(defvalidate valid-array {"type" "object"
+                          "properties" {"things" {"type" "array"
+                                                  "items" {"type" "string"}
+                                                  "minItems" 3
+                                                  "maxItems" 4
+                                                  "uniqueItems" true}}})
 
 (deftest validate-minimum-number-of-items
-  (let [schema (cheshire/parse-string "{\"type\" : \"object\", \"properties\" : {\"things\" : {\"type\" : \"array\", \"items\" : {\"type\" : \"string\" }, \"minItems\" : 3, \"maxItems\" : 4 } } }")
-        json (cheshire/parse-string "{\"things\" : [\"value\", \"value\"] }")
-        errors (validate schema json {:draft3-required true})
-        expected-errors {:error :properties, :data {"things" ["value" "value"]}, :properties {"things" {:error :wrong-number-of-elements, :minimum 3, :actual 2}}}]
+  (let [json (cheshire/parse-string "{\"things\" : [\"value\", \"value\"] }")
+        errors (valid-array json)
+        expected-errors {:error :properties
+                         :data {"things" ["value" "value"]}
+                         :properties {"things" {:error :wrong-number-of-elements
+                                                :minimum 3
+                                                :actual 2}}}]
     (is (= expected-errors errors))))
 
 (deftest validate-maximum-number-of-items
-  (let [schema (cheshire/parse-string "{\"type\" : \"object\", \"properties\" : {\"things\" : {\"type\" : \"array\", \"items\" : {\"type\" : \"string\" }, \"minItems\" : 3, \"maxItems\" : 4 } } }")
-        json (cheshire/parse-string "{\"things\" : [\"value\", \"value\", \"value\", \"value\", \"value\"] }")
-        errors (validate schema json {:draft3-required true})
-        expected-errors {:error :properties, :data {"things" ["value" "value" "value" "value" "value"]}, :properties {"things" {:error :wrong-number-of-elements, :maximum 4, :actual 5}}}]
+  (let [json (cheshire/parse-string "{\"things\" : [\"value\", \"value\", \"value\", \"value\", \"value\"] }")
+        errors (valid-array json)
+        expected-errors {:error :properties
+                         :data {"things" ["value" "value" "value" "value" "value"]}
+                         :properties {"things" {:error :wrong-number-of-elements
+                                                :maximum 4
+                                                :actual 5}}}]
     (is (= expected-errors errors))))
 
 (deftest validate-unique-items
-  (let [schema (cheshire/parse-string "{\"type\" : \"object\", \"properties\" : {\"things\" : {\"type\" : \"array\", \"items\" : {\"type\" : \"string\" }, \"minItems\" : 3, \"maxItems\" : 4, \"uniqueItems\": true } } }")
-        json (cheshire/parse-string "{\"things\" : [\"value\", \"value\", \"value\", \"value\"] }")
-        errors (validate schema json {:draft3-required true})
-        expected-errors {:error :properties, :data {"things" ["value" "value" "value" "value"]}, :properties {"things" {:error :duplicate-items-not-allowed}}}]
+  (let [json (cheshire/parse-string "{\"things\" : [\"value\", \"value\", \"value\", \"value\"] }")
+        errors (valid-array json)
+        expected-errors {:error :properties,
+                         :data {"things" ["value" "value" "value" "value"]}
+                         :properties {"things" {:error :duplicate-items-not-allowed}}}]
     (is (= expected-errors errors))))
 
 (deftest validate-valid-array
-  (let [schema (cheshire/parse-string "{\"type\" : \"object\", \"properties\" : {\"things\" : {\"type\" : \"array\", \"items\" : {\"type\" : \"string\" }, \"minItems\" : 3, \"maxItems\" : 4, \"uniqueItems\": true } } }")
-        json (cheshire/parse-string "{\"things\" : [\"first\", \"second\", \"third\"] }")
-        errors (validate schema json {:draft3-required true})]
+  (let [json (cheshire/parse-string "{\"things\" : [\"first\", \"second\", \"third\"] }")
+        errors (valid-array json)]
     (is (nil? errors))))
 
+(defvalidate enum-array {"type" "array"
+                         "items" {"enum" ["foo" "bar"]}})
+
 (deftest validate-enum-array
-  (let [schema (cheshire/parse-string "{\"type\": \"array\", \"items\": {\"enum\": [\"foo\",\"bar\"]}}")
-        json (cheshire/parse-string "[\"foo\", \"kek\"]")
-        errors (validate schema json {:draft3-required true})]
+  (let [json (cheshire/parse-string "[\"foo\", \"kek\"]")
+        errors (enum-array json)]
     (is (= errors {:error    :array-items
                    :data     ["foo" "kek"]
                    :items [{:error :invalid-enum-value
                             :data "kek"
                             :allowed-values #{"foo" "bar"}
-                            :position 1}]
-                   }))))
+                            :position 1}]}))))
 
 (deftest validate-enum-array-ok
-  (let [schema (cheshire/parse-string "{\"type\": \"array\", \"items\": {\"enum\": [\"foo\",\"bar\"]}}")
-        json (cheshire/parse-string "[\"foo\", \"bar\"]")
-        errors (validate schema json {:draft3-required true})]
+  (let [json (cheshire/parse-string "[\"foo\", \"bar\"]")
+        errors (enum-array json)]
     (is (nil? errors))))
 
+(defvalidate valid-date {"type" "object"
+                         "properties" {"date" {"id" "http://jsonschema.net/date"
+                                               "type" "string"
+                                               "format" "date-time"}}})
 (deftest validate-valid-date
-  (let [schema (cheshire/parse-string "{\"type\": \"object\",\"properties\": {\"date\": {\"id\": \"http://jsonschema.net/date\",\"type\": \"string\",\"format\": \"date-time\"}}}")
-        json (cheshire/parse-string "{\"date\": \"2015-01-30T12:00:00Z\"}")
-        errors (validate schema json {:draft3-required true})]
+  (let [json (cheshire/parse-string "{\"date\": \"2015-01-30T12:00:00Z\"}")
+        errors (valid-date json)]
     (is (nil? errors))))
 
 (deftest validate-invalid-date
-  (let [schema (cheshire/parse-string "{\"type\": \"object\",\"properties\": {\"date\": {\"id\": \"http://jsonschema.net/date\",\"type\": \"string\",\"format\": \"date-time\"}}}")
-        json (cheshire/parse-string "{\"date\": \"foo\"}")
-        errors (validate schema json {:draft3-required true})
+  (let [json (cheshire/parse-string "{\"date\": \"foo\"}")
+        errors (valid-date json)
         expected-errors {:data       {"date" "foo"}
                          :error      :properties
                          :properties {"date" {:data     "foo"

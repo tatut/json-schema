@@ -45,6 +45,7 @@
                              (when property-value
                                (when-let [error (validate property-schema property-value options)]
                                  [property-name error]))))))]
+      (println "FN: required? " required? "; errors " errors)
       (if-not (empty? errors)
         {:error      :properties
          :data       data
@@ -180,17 +181,16 @@
 
   :draft3-required  when set to true, support draft3 style required (in property definition),
                     defaults to false"
-  ([schema data] (validate schema data {:ref-resolver resolve-ref}))
+  ([schema data] (validate schema data {}))
   ([schema data options]
-   (if-let [ref (get schema "$ref")]
-     (let [referenced-schema ((:ref-resolver options) ref)]
-       (if-not referenced-schema
-         {:error      :unable-to-resolve-referenced-schema
-          :schema-uri ref}
-         (validate referenced-schema data options)))
+   (let [options (merge {:ref-resolver resolve-ref}
+                        options)]
+     (if-let [ref (get schema "$ref")]
+       (let [referenced-schema ((:ref-resolver options) ref)]
+         (if-not referenced-schema
+           {:error      :unable-to-resolve-referenced-schema
+            :schema-uri ref}
+           (validate referenced-schema data options)))
 
-     (or (validate-enum-value schema data)
-         (validate-by-type schema data options)))))
-  
-  
-
+       (or (validate-enum-value schema data)
+           (validate-by-type schema data options))))))
