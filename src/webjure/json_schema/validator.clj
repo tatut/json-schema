@@ -45,7 +45,6 @@
                              (when property-value
                                (when-let [error (validate property-schema property-value options)]
                                  [property-name error]))))))]
-      (println "FN: required? " required? "; errors " errors)
       (if-not (empty? errors)
         {:error      :properties
          :data       data
