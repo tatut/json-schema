@@ -12,8 +12,7 @@
 
 (defmulti validate-by-type
   "Create expansion code for JSON schema validation by type. The expansion takes the data
-  as the first parameter and the current error vector as the second and must return
-  a new error vector. "
+  symbol, callbacks to create expansions for error and ok validations and the options map."
   (fn [schema data-sym error ok options] (get schema "type")))
 
 (defn error [error-sym e]
