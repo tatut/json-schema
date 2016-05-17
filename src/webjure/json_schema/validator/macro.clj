@@ -103,7 +103,8 @@
 
 (defn validate-number-bounds [{min           "minimum" max "maximum"
                                exclusive-min "exclusiveMinimum"
-                               exclusive-max "exclusiveMaximum"}
+                               exclusive-max "exclusiveMaximum"
+                               multiple-of   "multipleOf"}
                               data error ok]
   (let [e (gensym "E")]
     `(cond
@@ -138,6 +139,13 @@
                        :data      ~data
                        :maximum   ~max
                        :exclusive false}]
+               ~(error e))])
+
+       ~@(when multiple-of
+           [`(not= 0 (rem ~data ~multiple-of))
+            `(let [~e {:error :not-multiple-of
+                       :data ~data
+                       :expected-multiple-of ~multiple-of}]
                ~(error e))])
 
        :default

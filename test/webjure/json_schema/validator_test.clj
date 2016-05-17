@@ -205,3 +205,11 @@
                                               :error    :wrong-format
                                               :expected :date-time}}}]
     (is (= expected-errors errors))))
+
+(defvalidate multiple-of-8 {"type" "number"
+                            "multipleOf" 8})
+
+(deftest validate-multiple-of-8
+  (is (nil? (multiple-of-8 16)))
+  (is (nil? (multiple-of-8 256)))
+  (is (multiple-of-8 55)))

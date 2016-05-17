@@ -66,7 +66,9 @@
 
 (defn validate-number-bounds [{min           "minimum" max "maximum"
                                exclusive-min "exclusiveMinimum"
-                               exclusive-max "exclusiveMaximum"} data]
+                               exclusive-max "exclusiveMaximum"
+                               multiple-of "multipleOf"}
+                              data]
   (cond
     (and min exclusive-min (<= data min))
     {:error     :out-of-bounds
@@ -91,6 +93,11 @@
      :data      data
      :maximum   max
      :exclusive false}
+
+    (and multiple-of (not= 0 (rem data multiple-of)))
+    {:error :not-multiple-of
+     :data data
+     :expected-multiple-of multiple-of}
 
     :default nil))
 
