@@ -1,52 +1,28 @@
 (ns webjure.json-schema.validator-test
-  (:require [clojure.test :refer [deftest testing is]]
-            [webjure.json-schema.validator :refer [validate]]
-            [webjure.json-schema.validator.macro :refer [make-validator]]
-            [cheshire.core :as cheshire]))
-
-
-(defn p [resource-path]
-  (->> resource-path
-       (str "test/resources/")
-       slurp cheshire/parse-string))
-
-;; Define a macro that defines a new validator function.
-;; The function calls both the function style validation and
-;; the generated macro version and verifies that they validate
-;; errors in the same way.
-(defmacro defvalidate [name schema & opts]
-  (let [schema (if (string? schema)
-                 (p schema)
-                 schema)
-        opts (or (first opts) {})]
-    `(defn ~name [data#]
-       (let [fn-res# (validate ~schema data# ~opts)
-             macro-res# ((make-validator ~schema ~opts) data#)]
-         (is (= fn-res# macro-res#)
-             "function and macro versions validate in the same way")
-         fn-res#))))
+  (:require [cheshire.core :as cheshire]
+            [clojure.test :refer [deftest is testing]]
+            [webjure.json-schema.test-util :refer [defvalidate p]]))
 
 (defvalidate address-and-phone "address-and-phone.schema.json")
 
 (deftest validate-address-and-phone
   (testing "jsonschema.net example schema"
-    (let [s (p "address-and-phone.schema.json")]
-      (testing "valid json returns nil errors"
-        (is (nil? (address-and-phone (p "address-and-phone-valid.json")))))
+    (testing "valid json returns nil errors"
+      (is (nil? (address-and-phone (p "address-and-phone-valid.json")))))
 
-      (testing "missing property error is reported"
-        (let [e (address-and-phone (p "address-and-phone-city-and-code-missing.json"))]
-          (is (= :properties (:error e)))
-          ;; "city" is reported as missing because it is required
-          (is (= :missing-property (get-in e [:properties "address" :properties "city" :error])))
+    (testing "missing property error is reported"
+      (let [e (address-and-phone (p "address-and-phone-city-and-code-missing.json"))]
+        (is (= :properties (:error e)))
+        ;; "city" is reported as missing because it is required
+        (is (= :missing-property (get-in e [:properties "address" :properties "city" :error])))
 
-          ;; no errors in "phoneNumber" because missing "code" in first item is not required
-          (is (nil? (get-in e [:properties "phoneNumber"])))))
+        ;; no errors in "phoneNumber" because missing "code" in first item is not required
+        (is (nil? (get-in e [:properties "phoneNumber"])))))
 
-      (testing "additional properties are reported"
-        (is (= {:error          :additional-properties
-                :property-names #{"youDidntExpectMe" "orMe"}}
-               (address-and-phone (p "address-and-phone-additional-properties.json"))))))))
+    (testing "additional properties are reported"
+      (is (= {:error          :additional-properties
+              :property-names #{"youDidntExpectMe" "orMe"}}
+             (address-and-phone (p "address-and-phone-additional-properties.json")))))))
 
 (defvalidate ref-schema "person.schema.json")
 (deftest validate-referenced-schema
@@ -121,13 +97,13 @@
           :properties {"name" {:error :missing-property}}}
          (draft3-requires (cheshire/parse-string "{\"age\": 42}")))))
 
-(defvalidate num {"type" "number"})
+(defvalidate numb {"type" "number"})
 (deftest validate-number
-  (is (nil? (num 3.33)))
+  (is (nil? (numb 3.33)))
   (is (= {:error    :wrong-type
           :expected :number
           :data     "foo"}
-         (num "foo"))))
+         (numb "foo"))))
 
 (defvalidate valid-array {"type" "object"
                           "properties" {"things" {"type" "array"
