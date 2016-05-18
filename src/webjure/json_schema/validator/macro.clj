@@ -195,8 +195,7 @@
           props (gensym "PROPS")
           prop (gensym "PROP")
           extra-properties (gensym "EXTRA-PROPS")
-          invalid-pp (gensym "INVALID-PP")
-          _ (println "PATTERN PROPERTIES: " pattern-properties)]
+          invalid-pp (gensym "INVALID-PP")]
       `(if-not (map? ~data)
          ~(ok)
          (let [~property-errors
