@@ -4,7 +4,8 @@
   (:require [clj-time.coerce :as time]
             [clj-time.format :as time-format]
             [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
-            [webjure.json-schema.validator.string :as string]))
+            [webjure.json-schema.validator.string :as string]
+            [clojure.string :as str]))
 
 
 (declare validate)
@@ -157,6 +158,12 @@
   ;; Courtesy of StackOverflow http://stackoverflow.com/a/1420225
   #"^(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\.?$")
 
+(def ipv4-pattern
+  #"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
+
+(def ipv6-pattern
+  #"^[:a-f0-9]+$")
+
 (defn validate-string-format [{format "format"} data error ok _]
   (let [e (gensym "E")]
     (cond
@@ -175,6 +182,25 @@
          (let [~e {:error :wrong-format :expected :hostname :data ~data}]
            ~(error e)))
 
+      (= format "ipv4")
+      `(let [[ip# & parts#] (re-matches ~ipv4-pattern ~data)]
+         (if (and ip#
+                  (every? #(<= 0 (Integer/parseInt %) 255) parts#))
+           ~(ok)
+           (let [~e {:error :wrong-format :expected :ipv4 :data ~data}]
+             ~(error e))))
+
+      (= format "ipv6")
+      `(if (and (re-matches ~ipv6-pattern ~data)
+                (.contains ~data ":")
+                (try
+                  (java.net.Inet6Address/getByName ~data)
+                  true
+                  (catch Exception e#
+                    false)))
+         ~(ok)
+         (let [~e {:error :wrong-format :expected :ipv6 :data ~data}]
+           ~(error e)))
 
       ;; Warn about unsupported format (no validation will be done)
       (not (nil? format))
