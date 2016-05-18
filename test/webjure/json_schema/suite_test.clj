@@ -49,15 +49,5 @@
                                  `(is (~schema-sym ~data)
                                       ~(str "Test '" desc "' should NOT be valid")))))))))))))
 
-;; 275 asserts => 82 fails
-;; 273 asserta => 78 fails
-;; => 76
-;; => 74
-;; => 72
-;; => 70
-;; => 67
-;; => 64
-;; => 63
-;; 61, 60, 57
 
 (define-suite-tests)

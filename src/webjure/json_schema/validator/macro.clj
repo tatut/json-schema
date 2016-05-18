@@ -173,7 +173,7 @@
                             additional-properties "additionalProperties"
                            :as        schema} data error ok options]
 
-  (when (or properties additional-properties)
+  (when (or properties additional-properties pattern-properties)
     (let [properties (or properties {})
           additional-properties (if (nil? additional-properties) {} additional-properties)
           required (if (:draft3-required options)
@@ -194,6 +194,7 @@
           props (gensym "PROPS")
           prop (gensym "PROP")
           extra-properties (gensym "EXTRA-PROPS")
+          invalid-pp (gensym "INVALID-PP")
           _ (println "PATTERN PROPERTIES: " pattern-properties)]
       `(if-not (map? ~data)
          ~(ok)
@@ -217,7 +218,26 @@
                           ~property-errors
 
                           ;; validate property by type
-                          ~(validate property-schema v error ok options)))))]
+                          ~(validate property-schema v error ok options))))
+
+                 ;; Validate pattern properties
+                 ~@(for [[pattern schema] pattern-properties
+                         :let [error (fn [error]
+                                       `(assoc ~property-errors ~pattern ~error))
+                               ok (constantly property-errors)]]
+                     `(let [~invalid-pp (keep (fn [name#]
+                                                (when (re-find ~(re-pattern pattern) name#)
+                                                  (let [~v (get ~data name#)]
+                                                    ~(validate schema v options))))
+                                              (keys ~data))]
+                        (if-not (empty? ~invalid-pp)
+                          (let [~e {:error :invalid-pattern-properties
+                                    :pattern ~pattern
+                                    :schema ~schema
+                                    :properties (into #{} ~invalid-pp)}]
+                            ~(error e))
+                          ~(ok))))
+                 )]
            (if-not (empty? ~property-errors)
              (let [~e {:error      :properties
                        :data       ~data
@@ -268,6 +288,30 @@
 
                   :default
                   (ok)))))))))
+
+(defn validate-property-count [{min "minProperties" max "maxProperties" :as schema} data error ok _]
+  (when (or min max)
+    (let [e (gensym "E")]
+      `(cond
+         ~@(when-not (type-is? schema "object")
+             [`(not (map? ~data))
+              (ok)])
+
+         ~@(when min
+             [`(< (count ~data) ~min)
+              `(let [~e {:error :too-few-properties
+                         :minimum-properties ~min
+                         :data ~data}]
+                 ~(error e))])
+         ~@(when max
+             [`(> (count ~data) ~max)
+              `(let [~e {:error :too-many-properties
+                         :maximum-properties ~max
+                         :data ~data}]
+                 ~(error e))])
+
+         :default
+         ~(ok)))))
 
 (defn validate-enum-value
   [{enum "enum"} data error ok _]
@@ -355,14 +399,73 @@
                       duplicates#)
                     items#)))))))
 
+(defn validate-not [{schema "not"} data error ok options]
+  (when schema
+    (let [e (gensym "E")]
+      `(let [~e ~(validate schema data options)]
+         (if (nil? ~e)
+           (let [~e {:error :should-not-match
+                     :schema ~schema
+                     :data ~data}]
+             ~(error e))
+           ~(ok))))))
 
+(defn validate-all-of [{all-of "allOf"} data error ok options]
+  (when-not (empty? all-of)
+    (let [e (gensym "E")]
+      `(if-not (and
+                ~@(for [schema all-of]
+                    `(nil? ~(validate schema data options))))
+         (let [~e {:error :does-not-match-all-of
+                   :all-of ~all-of
+                   :data ~data}]
+           ~(error e))
+         ~(ok)))))
 
-(def validations [validate-type
-                  validate-enum-value
-                  validate-number-bounds
-                  validate-string-length validate-string-pattern validate-string-format
-                  validate-properties
-                  validate-array-items validate-array-item-count validate-array-unique-items])
+(defn validate-any-of [{any-of "anyOf"} data error ok options]
+  (when-not (empty? any-of)
+    (let [e (gensym "E")]
+      `(if-not (or
+                ~@(for [schema any-of]
+                    `(nil? ~(validate schema data options))))
+         (let [~e {:error :does-not-match-any-of
+                   :any-of ~any-of
+                   :data ~data}]
+           ~(error e))
+         ~(ok)))))
+
+(defn validate-dependencies [{dependencies "dependencies" :as schema} data error ok options]
+  (when-not (empty? dependencies)
+    (let [e (gensym "E" )]
+      `(cond
+         ~@(when-not (type-is? schema "object")
+             [`(not (map? ~data))
+              (ok)])
+
+         ~@(mapcat
+            (fn [[property schema-or-properties]]
+              [`(and (contains? ~data ~property)
+                     ~(if (map? schema-or-properties)
+                        (validate schema-or-properties data options)
+                        `(or ~@(for [p schema-or-properties]
+                                 `(not (contains? ~data ~p))))))
+               `(let [~e {:error :dependency-mismatch
+                          :dependency {~property ~schema-or-properties}
+                          :data ~data}]
+                  ~(error e))])
+            dependencies)
+
+         :default
+         ~(ok)))))
+
+(def validations [#'validate-not #'validate-all-of #'validate-any-of
+                  #'validate-dependencies
+                  #'validate-type
+                  #'validate-enum-value
+                  #'validate-number-bounds
+                  #'validate-string-length #'validate-string-pattern validate-string-format
+                  #'validate-properties #'validate-property-count
+                  #'validate-array-items #'validate-array-item-count #'validate-array-unique-items])
 
 (defn validate
   ([schema data options]
