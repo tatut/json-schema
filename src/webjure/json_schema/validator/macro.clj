@@ -2,6 +2,7 @@
   "Macro version of validator. Loads and parses schema at compile time and
   emits code to check data for validity."
   (:require [clj-time.coerce :as time]
+            [clj-time.format :as time-format]
             [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
             [webjure.json-schema.validator.string :as string]))
 
@@ -150,14 +151,19 @@
                      :data ~data}]
              ~(error e)))))))
 
+(def rfc3339-formatter (time-format/formatters :date-time))
+
 (defn validate-string-format [{format "format"} data error ok _]
   (let [e (gensym "E")]
     (cond
       (= format "date-time")
-      `(if (nil? (time/from-string ~data))
-         (let [~e {:error :wrong-format :expected :date-time :data ~data}]
-           ~(error e))
-         ~(ok))
+      `(try
+         (time-format/parse rfc3339-formatter ~data)
+         ~(ok)
+         (catch Exception e#
+           (let [~e {:error :wrong-format :expected :date-time :data ~data
+                     :parse-exception e#}]
+             ~(error e))))
 
 
       ;; Warn about unsupported format (no validation will be done)
