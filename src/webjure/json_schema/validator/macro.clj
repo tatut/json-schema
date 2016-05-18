@@ -190,6 +190,9 @@
            (let [~e {:error :wrong-format :expected :ipv4 :data ~data}]
              ~(error e))))
 
+      ;; Check that the string contains only the allowed characters
+      ;; and contains an ':' character. Then try to parse with Java
+      ;; Inet6Address class.
       (= format "ipv6")
       `(if (and (re-matches ~ipv6-pattern ~data)
                 (.contains ~data ":")
