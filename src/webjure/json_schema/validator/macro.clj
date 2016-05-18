@@ -153,6 +153,10 @@
 
 (def rfc3339-formatter (time-format/formatters :date-time))
 
+(def hostname-pattern
+  ;; Courtesy of StackOverflow http://stackoverflow.com/a/1420225
+  #"^(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\.?$")
+
 (defn validate-string-format [{format "format"} data error ok _]
   (let [e (gensym "E")]
     (cond
@@ -164,6 +168,12 @@
            (let [~e {:error :wrong-format :expected :date-time :data ~data
                      :parse-exception e#}]
              ~(error e))))
+
+      (= format "hostname")
+      `(if (re-matches ~hostname-pattern ~data)
+         ~(ok)
+         (let [~e {:error :wrong-format :expected :hostname :data ~data}]
+           ~(error e)))
 
 
       ;; Warn about unsupported format (no validation will be done)
