@@ -2,7 +2,8 @@
   "Macro version of validator. Loads and parses schema at compile time and
   emits code to check data for validity."
   (:require [clj-time.coerce :as time]
-            [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]))
+            [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
+            [webjure.json-schema.validator.string :as string]))
 
 
 (declare validate)
@@ -122,13 +123,13 @@
               (ok)])
 
          ~@(when min
-             [`(< (count ~data) ~min)
+             [`(< (string/length ~data) ~min)
               `(let [~e {:error :string-too-short
                          :minimum-length ~min
                          :data ~data}]
                  ~(error e))])
          ~@(when max
-             [`(> (count ~data) ~max)
+             [`(> (string/length ~data) ~max)
               `(let [~e {:error :string-too-long
                          :maximum-length ~max
                          :data ~data}]
