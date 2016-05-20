@@ -263,7 +263,10 @@
                           ~property-errors
 
                           ;; validate property by type
-                          ~(validate property-schema v error ok options))))
+                          (let [~e ~(validate property-schema v options)]
+                            (if ~e
+                              ~(error e)
+                              ~(ok))))))
 
                  ;; Validate pattern properties
                  ~@(for [[pattern schema] pattern-properties
