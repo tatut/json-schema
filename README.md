@@ -1,10 +1,19 @@
-# json-schema tools
+# json-schema validator
 
-Currently contains only a very minimal JSON schema validator using cheshire to parse JSON.
+Currently contains a usable JSON schema validator using cheshire to parse JSON.
 Supportes linked schemas with $ref and allows user to specify
-how linked URIs are resolved.
+how linked URIs are loaded.
 
 [![Clojars Project](http://clojars.org/webjure/json-schema/latest-version.svg)](http://clojars.org/webjure/json-schema)
+
+## Status
+
+The project is tested against [JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite)
+and passes most of the tests.
+
+The macro version has problems with huge schemas (like loading the meta schema) as the generated
+code is too large for a single function.
+
 
 ## Usage
 
