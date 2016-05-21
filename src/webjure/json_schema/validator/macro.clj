@@ -169,7 +169,7 @@
     (cond
       (= format "date-time")
       `(try
-         (time-format/parse rfc3339-formatter ~data)
+         (time-format/parse rfc3339-formatter (str ~data))
          ~(ok)
          (catch Exception e#
            (let [~e {:error :wrong-format :expected :date-time :data ~data
@@ -177,13 +177,13 @@
              ~(error e))))
 
       (= format "hostname")
-      `(if (re-matches ~hostname-pattern ~data)
+      `(if (re-matches ~hostname-pattern (str ~data))
          ~(ok)
          (let [~e {:error :wrong-format :expected :hostname :data ~data}]
            ~(error e)))
 
       (= format "ipv4")
-      `(let [[ip# & parts#] (re-matches ~ipv4-pattern ~data)]
+      `(let [[ip# & parts#] (re-matches ~ipv4-pattern (str ~data))]
          (if (and ip#
                   (every? #(<= 0 (Integer/parseInt %) 255) parts#))
            ~(ok)
@@ -194,16 +194,25 @@
       ;; and contains an ':' character. Then try to parse with Java
       ;; Inet6Address class.
       (= format "ipv6")
-      `(if (and (re-matches ~ipv6-pattern ~data)
+      `(if (and (re-matches ~ipv6-pattern (str ~data))
                 (.contains ~data ":")
                 (try
-                  (java.net.Inet6Address/getByName ~data)
+                  (java.net.Inet6Address/getByName (str ~data))
                   true
                   (catch Exception e#
                     false)))
          ~(ok)
          (let [~e {:error :wrong-format :expected :ipv6 :data ~data}]
            ~(error e)))
+
+      (= format "uri")
+      `(try
+         (java.net.URI. (str ~data))
+         ~(ok)
+         (catch java.net.URISyntaxException e#
+           (let [~e {:error :wrong-format :expected :uri :data ~data
+                     :parse-exception e#}]
+             ~(error e))))
 
       ;; Warn about unsupported format (no validation will be done)
       (not (nil? format))
