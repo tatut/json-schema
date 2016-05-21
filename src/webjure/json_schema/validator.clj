@@ -442,11 +442,13 @@
 
   :lax-date-time-format?  when set to true, allow more variation in date format,
                           normally only strict RFC3339 dates are valid"
-  [schema data options]
-  (let [options (-> options
-                    (ref/root-schema schema)
-                    (assoc :ref-resolver (or (:ref-resolver options)
-                                             (memoize ref/resolve-ref))))
-        schema (resolve-schema schema options)
-        definitions (get schema "definitions")]
-    (some #(% schema data options) validations)))
+  ([schema data]
+   (validate schema data {}))
+  ([schema data options]
+   (let [options (-> options
+                     (ref/root-schema schema)
+                     (assoc :ref-resolver (or (:ref-resolver options)
+                                              (memoize ref/resolve-ref))))
+         schema (resolve-schema schema options)
+         definitions (get schema "definitions")]
+     (some #(% schema data options) validations))))
