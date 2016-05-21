@@ -493,7 +493,9 @@
              ~(error e))
            ~(ok))))))
 
-(defn validate-all-of [{all-of "allOf"} data error ok options]
+(defn validate-all-of
+  "Validate match against all of the given schemas."
+  [{all-of "allOf"} data error ok options]
   (when-not (empty? all-of)
     (let [e (gensym "E")]
       `(if-not (and
@@ -505,7 +507,9 @@
            ~(error e))
          ~(ok)))))
 
-(defn validate-any-of [{any-of "anyOf"} data error ok options]
+(defn validate-any-of
+  "Validate match against any of the given schemas."
+  [{any-of "anyOf"} data error ok options]
   (when-not (empty? any-of)
     (let [e (gensym "E")]
       `(if-not (or
@@ -516,6 +520,20 @@
                    :data ~data}]
            ~(error e))
          ~(ok)))))
+
+(defn validate-one-of
+  "Validate match against one (and only one) of the given schemas."
+  [{one-of "oneOf"} data error ok options]
+  (when-not (empty? one-of)
+    (let [e (gensym "E")
+          c (gensym "C")]
+      `(let [~c (+ ~@(for [s one-of]
+                       (validate s data (constantly 1) (constantly 0) options)))]
+         (if-not (= 1 ~c)
+           (let [~e {:error :item-does-not-match-exactly-one-schema
+                     :matched-schemas ~c}]
+             ~(error e))
+           ~(ok))))))
 
 (defn validate-dependencies [{dependencies "dependencies" :as schema} data error ok options]
   (when-not (empty? dependencies)
@@ -541,7 +559,7 @@
          :default
          ~(ok)))))
 
-(def validations [#'validate-not #'validate-all-of #'validate-any-of
+(def validations [#'validate-not #'validate-all-of #'validate-any-of #'validate-one-of
                   #'validate-dependencies
                   #'validate-type
                   #'validate-enum-value
