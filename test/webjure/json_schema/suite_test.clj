@@ -33,21 +33,20 @@
   (let [schema-sym (gensym "SCHEMA")]
     `(do
        ~@(for [[test-name tests] suite-tests]
-           (do (println "EXPANDING " test-name)
-               `(deftest ~(sym (str "suite-" test-name))
-                  ~@(for [{desc "description"
-                           schema "schema"
-                           tests "tests"} tests]
-                      `(testing ~desc
-                         (let [~schema-sym (validate-fn ~schema {})]
-                           ~@(for [{desc "description"
-                                    data "data"
-                                    valid? "valid"} tests]
-                               (if valid?
-                                 `(is (nil? (~schema-sym ~data))
-                                      ~(str "Test '" desc "' should be valid"))
-                                 `(is (~schema-sym ~data)
-                                      ~(str "Test '" desc "' should NOT be valid")))))))))))))
+           `(deftest ~(sym (str "suite-" test-name))
+              ~@(for [{desc "description"
+                       schema "schema"
+                       tests "tests"} tests]
+                  `(testing ~desc
+                     (let [~schema-sym (validate-fn ~schema {})]
+                       ~@(for [{desc "description"
+                                data "data"
+                                valid? "valid"} tests]
+                           (if valid?
+                             `(is (nil? (~schema-sym ~data))
+                                  ~(str "Test '" desc "' should be valid"))
+                             `(is (~schema-sym ~data)
+                                  ~(str "Test '" desc "' should NOT be valid"))))))))))))
 
 
 (define-suite-tests)

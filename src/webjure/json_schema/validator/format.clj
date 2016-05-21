@@ -23,9 +23,8 @@
   (try
     (time-format/parse rfc3339-formatter (str d))
     nil
-    (catch Exception e
-      {:error :wrong-format :expected :date-time :data d
-       :parse-exception e})))
+    (catch Exception _
+      {:error :wrong-format :expected :date-time :data d})))
 
 (defn validate-hostname [d]
   (if (re-matches hostname-pattern (str d))

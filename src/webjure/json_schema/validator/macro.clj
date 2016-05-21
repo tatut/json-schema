@@ -1,9 +1,7 @@
 (ns webjure.json-schema.validator.macro
   "Macro version of validator. Loads and parses schema at compile time and
   emits code to check data for validity."
-  (:require [clj-time.coerce :as time]
-            [clj-time.format :as time-format]
-            [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
+  (:require [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
             [webjure.json-schema.validator.string :as string]
             [webjure.json-schema.validator.format :as format]
             [clojure.string :as str]))
@@ -158,20 +156,21 @@
 
 
 (defn validate-string-format [{format "format"} data error ok _]
-  (let [e (gensym "E")]
-    `(if-let [~e (~(case format
-                     "date-time" format/validate-date-time
-                     "hostname" format/validate-hostname
-                     "ipv4" format/validate-ipv4
-                     "ipv6" format/validate-ipv6
-                     "uri" format/validate-uri
-                     "email" format/validate-email
-                     (do
-                       (println "WARNING: Unsupported format: " format)
-                       `(constantly nil)))
-                  ~data)]
-       ~(error e)
-       ~(ok))))
+  (when format
+    (let [e (gensym "E")]
+      `(if-let [~e (~(case format
+                       "date-time" format/validate-date-time
+                       "hostname" format/validate-hostname
+                       "ipv4" format/validate-ipv4
+                       "ipv6" format/validate-ipv6
+                       "uri" format/validate-uri
+                       "email" format/validate-email
+                       (do
+                         (println "WARNING: Unsupported format: " format)
+                         `(constantly nil)))
+                    ~data)]
+         ~(error e)
+         ~(ok)))))
 
 (defn validate-properties [{properties "properties"
                             pattern-properties "patternProperties"
@@ -490,9 +489,10 @@
     (let [e (gensym "E")
           c (gensym "C")]
       `(let [~c (+ ~@(for [s one-of]
-                       (validate s data (constantly 1) (constantly 0) options)))]
+                       (validate s data (constantly 0) (constantly 1) options)))]
          (if-not (= 1 ~c)
            (let [~e {:error :item-does-not-match-exactly-one-schema
+                     :data ~data
                      :matched-schemas ~c}]
              ~(error e))
            ~(ok))))))

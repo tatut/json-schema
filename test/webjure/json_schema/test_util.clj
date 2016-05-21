@@ -20,17 +20,11 @@
                  schema)
         opts (or (first opts) {})]
     `(fn [data#]
-       (try
-         (let [;;fn-res# (validate ~schema data# ~opts)
-               macro-res# ((make-validator ~schema ~opts) data#)]
-           #_(is (= fn-res# macro-res#)
-                 "function and macro versions validate in the same way")
-           macro-res#)
-         (catch Throwable t#
-           (is false (str "Validation exception."
-                          "\nSchema: " ~(pr-str schema)
-                          "\nData: " (pr-str data#)
-                          "\nMessage: " (.getMessage t#))))))))
+       (let [fn-res# (validate ~schema data# ~opts)
+             macro-res# ((make-validator ~schema ~opts) data#)]
+         (is (= fn-res# macro-res#)
+             "function and macro versions validate in the same way")
+         macro-res#))))
 
 (defmacro defvalidate [name schema & opts]
   (let [schema (if (string? schema)

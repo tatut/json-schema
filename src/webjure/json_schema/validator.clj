@@ -1,202 +1,434 @@
 (ns webjure.json-schema.validator
   "Validator for JSON schema for draft 4"
-  (:require [cheshire.core :as cheshire]
-            [clojure.java.io :as io]
-            [clj-time.coerce :as time]))
+  (:require [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
+            [webjure.json-schema.validator.string :as string]
+            [webjure.json-schema.validator.format :as format]
+            [clojure.string :as str]))
 
 (declare validate)
 
-(defn resolve-ref [uri]
-  (let [schema (io/file uri)]
-    (when (.canRead schema)
-      (cheshire/parse-string (slurp schema)))))
+(defn validate-type
+  "Check one of the seven JSON schema core types"
+  [{type "type"} data _]
 
-(defmulti validate-by-type
-          "Validate JSON schema item by type. Returns a sequence of errors."
-          (fn [schema data options] (get schema "type")))
+  (when type
+    (let [check-type #(case %
+                        "array" (sequential? data)
+                        "boolean" (instance? Boolean data)
+                        "integer" (or (instance? Integer data)
+                                      (instance? Long data)
+                                      (instance? java.math.BigInteger data))
+                        "number" (number? data)
+                        "null" (nil? data)
+                        "object" (map? data)
+                        "string" (string? data)
+                        nil nil)]
 
-(defmethod validate-by-type "object"
-  [{properties "properties"
-    :as        schema} data options]
+      (when-not (if (sequential? type)
+                  (some check-type type)
+                  (check-type type))
+        {:error :wrong-type
+         :expected (if (sequential? type)
+                     (into #{}
+                           (map keyword)
+                           type)
+                     (keyword type))
+         :data data}))))
 
-  (if-not (map? data)
-    [{:error :wrong-type :expected :map
-      :data  data}]
-
-    (let [required? (if (:draft3-required options)
-                      ;; Draft 3 required is an attribute of the property schema
-                      (into #{}
-                            (keep (fn [[property-name property-schema]]
-                                    (when (get property-schema "required")
-                                      property-name))
-                                  properties))
-
-                      ;; Draft 4 has separate required attribute with a list of property names
-                      (into #{}
-                            (get schema "required")))
-          errors (into
-                   {}
-                   (keep identity
-                         (for [[property-name property-schema] properties
-                               :let [property-value (get data property-name)]]
-                           (if (and (nil? property-value)
-                                    (required? property-name))
-                             [property-name {:error :missing-property}]
-                             (when property-value
-                               (when-let [error (validate property-schema property-value options)]
-                                 [property-name error]))))))]
-      (if-not (empty? errors)
-        {:error      :properties
-         :data       data
-         :properties errors}
-
-        (let [property-names (into #{} (map first properties))
-              extra-properties (into #{}
-                                     (keep #(when-not (property-names %) %)
-                                           (keys data)))]
-          (if-not (empty? extra-properties)
-            ;; We have properties outside the schema, error
-            ;; FIXME: check additionalProperties flag
-            {:error          :additional-properties
-             :property-names extra-properties}
-
-            ;; No errors
-            nil))))))
 
 (defn validate-number-bounds [{min           "minimum" max "maximum"
                                exclusive-min "exclusiveMinimum"
                                exclusive-max "exclusiveMaximum"
-                               multiple-of "multipleOf"}
-                              data]
-  (cond
-    (and min exclusive-min (<= data min))
-    {:error     :out-of-bounds
-     :data      data
-     :minimum   min
-     :exclusive true}
+                               multiple-of   "multipleOf" :as schema}
+                              data _]
+  (when (or min max multiple-of)
+    (cond
+      (not (number? data))
+      nil
 
-    (and min (< data min))
-    {:error     :out-of-bounds
-     :data      data
-     :minimum   min
-     :exclusive false}
+      (and min exclusive-min
+           (<= data min))
+      {:error     :out-of-bounds
+       :data      data
+       :minimum   min
+       :exclusive true}
 
-    (and max exclusive-max (>= data max))
-    {:error     :out-of-bounds
-     :data      data
-     :maximum   max
-     :exclusive true}
+      (and min (not exclusive-min)
+           (< data min))
+      {:error     :out-of-bounds
+       :data      data
+       :minimum   min
+       :exclusive false}
 
-    (and max (> data max))
-    {:error     :out-of-bounds
-     :data      data
-     :maximum   max
-     :exclusive false}
 
-    (and multiple-of (not= 0 (rem data multiple-of)))
-    {:error :not-multiple-of
-     :data data
-     :expected-multiple-of multiple-of}
+      (and max exclusive-max
+           (>= data max))
+      {:error     :out-of-bounds
+       :data      data
+       :maximum   max
+       :exclusive true}
 
-    :default nil))
+      (and max (not exclusive-max)
+           (> data max))
+      {:error     :out-of-bounds
+       :data      data
+       :maximum   max
+       :exclusive false}
 
-(declare validate-enum-value)
 
-(defn validate-array-items [options item-schema data]
-  (loop [errors []
-         i 0
-         [item & items] data]
-    (if-not item
-      (if (empty? errors)
+      (and multiple-of
+           (not (or (zero? data)
+                    (let [d (/ data multiple-of)]
+                      (or (integer? d)
+                          (= (Math/floor d) d))))))
+      {:error :not-multiple-of
+       :data data
+       :expected-multiple-of multiple-of}
+
+      :default
+      nil)))
+
+(defn validate-string-length [{min "minLength" max "maxLength" :as schema} data _]
+  (when (or min max)
+    (cond
+      (not (string? data))
+      nil
+
+      (and min
+           (< (string/length data) min))
+      {:error :string-too-short
+       :minimum-length min
+       :data data}
+
+      (and max
+           (> (string/length data) max))
+      {:error :string-too-long
+       :maximum-length max
+       :data data}
+
+      :default
+      nil)))
+
+(defn validate-string-pattern [{pattern "pattern"} data _]
+  (when pattern
+    (if (or (not (string? data))
+            (re-find (re-pattern pattern) data))
+      nil
+      {:error :string-does-not-match-pattern
+       :pattern pattern
+       :data data})))
+
+(defn validate-string-format [{format "format"} data _]
+  (when format
+    ((case format
+       "date-time" format/validate-date-time
+       "hostname" format/validate-hostname
+       "ipv4" format/validate-ipv4
+       "ipv6" format/validate-ipv6
+       "uri" format/validate-uri
+       "email" format/validate-email
+       (do
+         (println "WARNING: Unsupported format: " format)
+         (constantly nil)))
+     data)))
+
+(defn validate-properties [{properties "properties"
+                            pattern-properties "patternProperties"
+                            additional-properties "additionalProperties"
+                           :as        schema} data options]
+
+  (when (or properties additional-properties pattern-properties)
+    (let [properties (or properties {})
+          additional-properties (if (nil? additional-properties) {} additional-properties)
+          required (if (:draft3-required options)
+                     ;; Draft 3 required is an attribute of the property schema
+                     (into #{}
+                           (for [[property-name property-schema] properties
+                                 :when (get property-schema "required")]
+                             property-name))
+
+                     ;; Draft 4 has separate required attribute with a list of property names
+                     (into #{}
+                           (get schema "required")))
+          property-names (into #{} (map first properties))]
+      (if-not (map? data)
         nil
-        {:error :array-items
-         :data  data
-         :items errors})
-      (let [item-error (if (and (map? item-schema) (item-schema "enum"))
-                         (validate-enum-value item-schema item)
-                         (validate-by-type item-schema item options))]
-        (recur (if item-error
-                 (conj errors (assoc item-error
-                                     :position i))
-                 errors)
-               (inc i)
-               items)))))
+        (let [property-errors
+              (as-> {} property-errors
 
-(defmethod validate-by-type "integer"
-  [schema data _]
-  (if-not (integer? data)
-    {:error :wrong-type :expected :integer :data data}
-    (validate-number-bounds schema data)))
+                ;; Check required props
+                (merge property-errors
+                       (into {}
+                             (keep (fn [p]
+                                     (when-not (contains? data p)
+                                       [p {:error :missing-property}])))
+                             required))
 
-(defmethod validate-by-type "number"
-  [schema data _]
-  (if-not (number? data)
-    {:error :wrong-type :expected :number :data data}
-    (validate-number-bounds schema data)))
+                ;; Property validations
+                (merge property-errors
+                       (into {}
+                             (keep (fn [[property-name property-schema]]
+                                     (let [v (get data property-name)]
+                                       (when-not (nil? v)
+                                         ;; nil values for required fields are checked earlier
+                                         (when-let [e (validate property-schema v options)]
+                                           [property-name e])))))
+                             properties))
+
+                ;; Validate pattern properties
+                (merge property-errors
+                       (into {}
+                             (keep
+                              (fn [[pattern schema]]
+                                (let [invalid-pp
+                                      (keep (fn [name]
+                                              (when (re-find (re-pattern pattern) name)
+                                                (let [v (get data name)]
+                                                  (validate schema v options))))
+                                            (keys data))]
+                                  (when-not (empty? invalid-pp)
+                                    [pattern {:error :invalid-pattern-properties
+                                              :pattern pattern
+                                              :schema schema
+                                              :properties (into #{} invalid-pp)}]))))
+                             pattern-properties)))]
+          (if-not (empty? property-errors)
+            {:error      :properties
+             :data       data
+             :properties property-errors}
+
+            (let [extra-properties (when-not (#{true {}} additional-properties)
+                                     (as-> (keys data) props
+                                       (remove property-names props)
+                                       (if pattern-properties
+                                         (remove
+                                          (fn [p]
+                                            (some #(re-find % p)
+                                                  (map re-pattern
+                                                       (keys pattern-properties))))
+                                          props)
+                                         props)
+                                       (into #{} props)))]
+              (cond
+                ;; No additional properties allowed, signal error if there are any
+                (false? additional-properties)
+                (if-not (empty? extra-properties)
+                  ;; We have properties outside the schema, error
+                  {:error          :additional-properties
+                   :property-names extra-properties}
+
+                  ;; No errors
+                  nil)
+
+
+                ;; Additional properties is a schema, check all extra properties
+                ;; against schema
+                (and (map? additional-properties) (not= {} additional-properties))
+                (let [invalid-additional-properties
+                      (into {}
+                            (keep (fn [prop]
+                                    (let [v (get data prop)
+                                          e (validate additional-properties v options)]
+                                      (when e
+                                        [prop e]))))
+                            extra-properties)]
+                  (when-not (empty? invalid-additional-properties)
+                    {:error :invalid-additional-properties
+                     :invalid-additional-properties invalid-additional-properties
+                     :data data}))
+
+                :default
+                nil))))))))
+
+(defn validate-property-count [{min "minProperties" max "maxProperties" :as schema} data _]
+  (when (or min max)
+    (cond
+      (not (map? data))
+      nil
+
+      (and min (< (count data) min))
+      {:error :too-few-properties
+       :minimum-properties min
+       :data data}
+
+      (and max (> (count data) max))
+      {:error :too-many-properties
+       :maximum-properties max
+       :data data}
+
+      :default
+      nil)))
 
 (defn validate-enum-value
-  [{enum "enum"} data]
-  (when enum
-    (let [allowed-values (into #{} enum)]
-      (when-not (allowed-values data)
-        {:error          :invalid-enum-value
-         :data           data
-         :allowed-values allowed-values}))))
+  [{enum "enum"} data _]
+  (when-let [allowed-values (and enum (into #{} enum))]
+    (when-not (allowed-values data)
+      {:error          :invalid-enum-value
+       :data           data
+       :allowed-values allowed-values})))
 
-(defmethod validate-by-type "string"
-  [schema data _]
-  (if (not (string? data))
-    {:error :wrong-type :expected :string :data data}
-    (let [format (get schema "format")]
-      (when (and format (= format "date-time") (nil? (time/from-string data)))
-        {:error :wrong-format :expected :date-time :data data}))))
+(defn validate-array-items [{item-schema "items"
+                             additional-items "additionalItems" :as schema} data options]
+  (when item-schema
+    (let [c (count data)]
+      (if-not (sequential? data)
+        nil
 
-(defmethod validate-by-type "array"
-  [schema data options]
-  (if-not (sequential? data)
-    {:error :wrong-type :expected :array-like :data data}
-    (let [min-items (get schema "minItems")
-          max-items (get schema "maxItems")
-          item-schema (get schema "items")
-          uniqueItems (get schema "uniqueItems")
-          items (count data)]
 
-      (cond (and min-items (> min-items items)) {:error :wrong-number-of-elements :minimum min-items :actual items}
-            (and max-items (< max-items items)) {:error :wrong-number-of-elements :maximum max-items :actual items}
-            (and uniqueItems (not= items (count (into #{} data)))) {:error :duplicate-items-not-allowed}
-            :else (validate-array-items options item-schema data)))))
+        (cond
+          ;; Schema is a map: validate all items against it
+          (map? item-schema)
+          (loop [errors []
+                 i 0]
+            (if (= i c)
+              (when-not (empty? errors)
+                {:error :array-items
+                 :data  data
+                 :items errors})
+              (let [item (nth data i)
+                    item-error
+                    (if (and (map? item-schema) (item-schema "enum"))
+                      (validate-enum-value item-schema item options)
+                      (validate item-schema item options))]
+                (recur (if item-error
+                         (conj errors (assoc item-error
+                                             :position i))
+                         errors)
+                       (inc i)))))
 
-(defmethod validate-by-type "boolean"
-  [_ data _]
-  (when (nil? (#{true false} data))
-    {:error :wrong-type :expected :boolean :data data}))
+          ;; Schema is an array, validate each index with its own schema
+          (sequential? item-schema)
+          (or (and (< c (count item-schema))
+                   {:error :too-few-items
+                    :expected-item-count (count item-schema)
+                    :actual-item-count c
+                    :data data})
 
-(defmethod validate-by-type :default
-  [schema data _]
-  ;; If no type is specified, anything goes
-  nil)
+              (first
+               (for [i (range (count item-schema))
+                     :let [item (nth data i)
+                           e (validate (nth item-schema i) item options)]
+                     :when e]
+                 e))
 
-(defn validate
-  "Validate the given data with the given schema. Both must be in Clojure format with string keys.
-  Returns nil on an error description map.
+              ;; If additional items is false, don't allow more items
+              (and (false? additional-items)
+                   (> (count data) (count item-schema))
+                   {:error :additional-items-not-allowed
+                    :additional-items (drop (count item-schema) data)
+                    :data data})
 
-  An map of options can be given that supports the keys:
-  :ref-resolver    Function for loading referenced schemas. Takes in
-                   the schema URI and must return the schema parsed form.
-                   Default just tries to read it as a file via slurp and parse.
+              ;; If additional items is a schema, check each against it
+              (and (map? additional-items)
+                   (some (fn [item]
+                           (when-let [e (validate additional-items item options)]
+                             {:error :additional-item-does-not-match-schema
+                              :item-error e
+                              :data data}))
+                         (drop (count item-schema) data)))))))))
 
-  :draft3-required  when set to true, support draft3 style required (in property definition),
-                    defaults to false"
-  ([schema data] (validate schema data {}))
-  ([schema data options]
-   (let [options (merge {:ref-resolver resolve-ref}
-                        options)]
-     (if-let [ref (get schema "$ref")]
-       (let [referenced-schema ((:ref-resolver options) ref)]
-         (if-not referenced-schema
-           {:error      :unable-to-resolve-referenced-schema
-            :schema-uri ref}
-           (validate referenced-schema data options)))
+(defn validate-array-item-count [{min-items "minItems" max-items "maxItems"} data options]
+  (when (or min-items max-items)
+    (if-not (sequential? data)
+      nil
+      (let [items (count data)]
+        (cond
+          (and min-items (> min-items items))
+          {:error :wrong-number-of-elements
+           :minimum min-items :actual items}
 
-       (or (validate-enum-value schema data)
-           (validate-by-type schema data options))))))
+          (and max-items (< max-items items))
+          {:error :wrong-number-of-elements
+           :maximum max-items :actual items}
+
+          :default
+          nil)))))
+
+(defn validate-array-unique-items [{unique-items "uniqueItems"} data _]
+  (when unique-items
+    (if-not (sequential? data)
+      nil
+      (let [c (count data)]
+        (loop [seen #{}
+               duplicates #{}
+               i 0]
+          (if (= i c)
+            (when-not (empty? duplicates)
+              {:error :duplicate-items-not-allowed
+               :duplicates duplicates})
+            (let [item (nth data i)]
+              (recur (conj seen item)
+                     (if (seen item)
+                       (conj duplicates item)
+                       duplicates)
+                     (inc i)))))))))
+
+(defn validate-not [{schema "not"} data options]
+  (when schema
+    (let [e (validate schema data options)]
+      (when (nil? e)
+        {:error :should-not-match
+         :schema schema
+         :data data}))))
+
+(defn validate-all-of
+  "Validate match against all of the given schemas."
+  [{all-of "allOf"} data options]
+  (when-not (empty? all-of)
+    (when-not (every? #(nil? (validate % data options)) all-of)
+      {:error :does-not-match-all-of
+       :all-of all-of
+       :data data})))
+
+(defn validate-any-of
+  "Validate match against any of the given schemas."
+  [{any-of "anyOf"} data options]
+  (when-not (empty? any-of)
+    (when-not (some #(nil? (validate % data options)) any-of)
+      {:error :does-not-match-any-of
+       :any-of any-of
+       :data data})))
+
+(defn validate-one-of
+  "Validate match against one (and only one) of the given schemas."
+  [{one-of "oneOf"} data options]
+  (when-not (empty? one-of)
+    (let [c (reduce (fn [c schema]
+                      (if (nil? (validate schema data options))
+                        (inc c)
+                        c))
+                    0 one-of)]
+      (when-not (= 1 c)
+        {:error :item-does-not-match-exactly-one-schema
+         :data data
+         :matched-schemas c}))))
+
+(defn validate-dependencies [{dependencies "dependencies" :as schema} data options]
+  (when (and (not (empty? dependencies))
+             (map? data))
+    (some (fn [[property schema-or-properties]]
+            (when (and (contains? data property)
+                       (if (map? schema-or-properties)
+                         (validate schema-or-properties data options)
+                         (not (every? #(contains? data %) schema-or-properties))))
+              {:error :dependency-mismatch
+               :dependency {property schema-or-properties}
+               :data data}))
+          dependencies)))
+
+(def validations [#'validate-not #'validate-all-of #'validate-any-of #'validate-one-of
+                  #'validate-dependencies
+                  #'validate-type
+                  #'validate-enum-value
+                  #'validate-number-bounds
+                  #'validate-string-length #'validate-string-pattern validate-string-format
+                  #'validate-properties #'validate-property-count
+                  #'validate-array-items #'validate-array-item-count #'validate-array-unique-items])
+
+(defn validate [schema data options]
+  (let [schema (resolve-schema schema options)
+        definitions (get schema "definitions")
+        options (assoc options
+                       :definitions (merge definitions
+                                           (:definitions options)))]
+    (some #(% schema data options) validations)))
