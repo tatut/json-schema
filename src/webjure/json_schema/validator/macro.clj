@@ -164,6 +164,12 @@
 (def ipv6-pattern
   #"^[:a-f0-9]+$")
 
+(def email-pattern
+  ;; I know, this isn't too permissive. This just checks
+  ;; that the email has an @ character (exactly one) and something
+  ;; on both sides of it.
+  #"^[^@]+@[^@]+$")
+
 (defn validate-string-format [{format "format"} data error ok _]
   (let [e (gensym "E")]
     (cond
@@ -213,6 +219,12 @@
                       (catch java.net.URISyntaxException e#
                         false)))
          (let [~e {:error :wrong-format :expected :uri :data ~data}]
+           ~(error e))
+         ~(ok))
+
+      (= format "email")
+      `(if-not (re-matches ~email-pattern (str ~data))
+         (let [~e {:error :wrong-format :expected :email :data ~data}]
            ~(error e))
          ~(ok))
 
