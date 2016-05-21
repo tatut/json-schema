@@ -206,13 +206,15 @@
            ~(error e)))
 
       (= format "uri")
-      `(try
-         (java.net.URI. (str ~data))
-         ~(ok)
-         (catch java.net.URISyntaxException e#
-           (let [~e {:error :wrong-format :expected :uri :data ~data
-                     :parse-exception e#}]
-             ~(error e))))
+      `(if-not (and (.contains (str ~data) "/")
+                    (try
+                      (java.net.URI. (str ~data))
+                      true
+                      (catch java.net.URISyntaxException e#
+                        false)))
+         (let [~e {:error :wrong-format :expected :uri :data ~data}]
+           ~(error e))
+         ~(ok))
 
       ;; Warn about unsupported format (no validation will be done)
       (not (nil? format))
