@@ -464,23 +464,26 @@
 (defn validate-array-unique-items [{unique-items "uniqueItems"} data error ok _]
   (when unique-items
     (let [item-count (gensym "IC")
-          e (gensym "E")]
+          e (gensym "E")
+          c (gensym "C")]
       `(if-not (sequential? ~data)
          ~(ok)
-         (loop [seen# #{}
-                duplicates# #{}
-                [item# & items#] ~data]
-           (if-not item#
-             (if-not (empty? duplicates#)
-               (let [~e {:error :duplicate-items-not-allowed
-                         :duplicates duplicates#}]
-                 ~(error e))
-               ~(ok))
-             (recur (conj seen# item#)
-                    (if (seen# item#)
-                      (conj duplicates# item#)
-                      duplicates#)
-                    items#)))))))
+         (let [~c (count ~data)]
+           (loop [seen# #{}
+                  duplicates# #{}
+                  i# 0]
+             (if (= i# ~c)
+               (if-not (empty? duplicates#)
+                 (let [~e {:error :duplicate-items-not-allowed
+                           :duplicates duplicates#}]
+                   ~(error e))
+                 ~(ok))
+               (let [item# (nth ~data i#)]
+                 (recur (conj seen# item#)
+                        (if (seen# item#)
+                          (conj duplicates# item#)
+                          duplicates#)
+                        (inc i#))))))))))
 
 (defn validate-not [{schema "not"} data error ok options]
   (when schema
