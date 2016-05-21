@@ -5,6 +5,7 @@
             [clj-time.format :as time-format]
             [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
             [webjure.json-schema.validator.string :as string]
+            [webjure.json-schema.validator.format :as format]
             [clojure.string :as str]))
 
 
@@ -152,90 +153,25 @@
                      :data ~data}]
              ~(error e)))))))
 
-(def rfc3339-formatter (time-format/formatters :date-time))
 
-(def hostname-pattern
-  ;; Courtesy of StackOverflow http://stackoverflow.com/a/1420225
-  #"^(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\.?$")
 
-(def ipv4-pattern
-  #"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 
-(def ipv6-pattern
-  #"^[:a-f0-9]+$")
-
-(def email-pattern
-  ;; I know, this isn't too permissive. This just checks
-  ;; that the email has an @ character (exactly one) and something
-  ;; on both sides of it.
-  #"^[^@]+@[^@]+$")
 
 (defn validate-string-format [{format "format"} data error ok _]
   (let [e (gensym "E")]
-    (cond
-      (= format "date-time")
-      `(try
-         (time-format/parse rfc3339-formatter (str ~data))
-         ~(ok)
-         (catch Exception e#
-           (let [~e {:error :wrong-format :expected :date-time :data ~data
-                     :parse-exception e#}]
-             ~(error e))))
-
-      (= format "hostname")
-      `(if (re-matches ~hostname-pattern (str ~data))
-         ~(ok)
-         (let [~e {:error :wrong-format :expected :hostname :data ~data}]
-           ~(error e)))
-
-      (= format "ipv4")
-      `(let [[ip# & parts#] (re-matches ~ipv4-pattern (str ~data))]
-         (if (and ip#
-                  (every? #(<= 0 (Integer/parseInt %) 255) parts#))
-           ~(ok)
-           (let [~e {:error :wrong-format :expected :ipv4 :data ~data}]
-             ~(error e))))
-
-      ;; Check that the string contains only the allowed characters
-      ;; and contains an ':' character. Then try to parse with Java
-      ;; Inet6Address class.
-      (= format "ipv6")
-      `(if (and (re-matches ~ipv6-pattern (str ~data))
-                (.contains ~data ":")
-                (try
-                  (java.net.Inet6Address/getByName (str ~data))
-                  true
-                  (catch Exception e#
-                    false)))
-         ~(ok)
-         (let [~e {:error :wrong-format :expected :ipv6 :data ~data}]
-           ~(error e)))
-
-      (= format "uri")
-      `(if-not (and (.contains (str ~data) "/")
-                    (try
-                      (java.net.URI. (str ~data))
-                      true
-                      (catch java.net.URISyntaxException e#
-                        false)))
-         (let [~e {:error :wrong-format :expected :uri :data ~data}]
-           ~(error e))
-         ~(ok))
-
-      (= format "email")
-      `(if-not (re-matches ~email-pattern (str ~data))
-         (let [~e {:error :wrong-format :expected :email :data ~data}]
-           ~(error e))
-         ~(ok))
-
-      ;; Warn about unsupported format (no validation will be done)
-      (not (nil? format))
-      (do (println "Unsupported string format: " format)
-          nil)
-
-      ;; No format in schema
-      :default
-      nil)))
+    `(if-let [~e (~(case format
+                     "date-time" format/validate-date-time
+                     "hostname" format/validate-hostname
+                     "ipv4" format/validate-ipv4
+                     "ipv6" format/validate-ipv6
+                     "uri" format/validate-uri
+                     "email" format/validate-email
+                     (do
+                       (println "WARNING: Unsupported format: " format)
+                       `(constantly nil)))
+                  ~data)]
+       ~(error e)
+       ~(ok))))
 
 (defn validate-properties [{properties "properties"
                             pattern-properties "patternProperties"
@@ -599,7 +535,11 @@
    (validate schema data identity (constantly nil) options))
   ([schema data error ok options]
    (let [schema (resolve-schema schema options)
-         e (gensym "E")]
+         e (gensym "E")
+         definitions (get schema "definitions")
+         options (assoc options
+                        :definitions (merge definitions
+                                            (:definitions options)))]
      `(or ~@(for [validate-fn validations
                   :let [form (validate-fn schema data error ok options)]
                   :when form]

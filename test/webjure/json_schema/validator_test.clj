@@ -189,3 +189,26 @@
   (is (nil? (multiple-of-8 16)))
   (is (nil? (multiple-of-8 256)))
   (is (multiple-of-8 55)))
+
+;; Definition example from validation spec
+(defvalidate definitions (cheshire/parse-string "{
+    \"type\": \"array\",
+    \"items\": { \"$ref\": \"#/definitions/positiveInteger\" },
+    \"definitions\": {
+        \"positiveInteger\": {
+            \"type\": \"integer\",
+            \"minimum\": 0,
+            \"exclusiveMinimum\": true
+        }
+    }
+}"))
+
+(deftest validate-definitions
+  (is (nil? (definitions [1 2 3])))
+  (is (= {:error :array-items
+          :items [{:exclude true :minimum 0
+                   :error :out-of-bounds
+                   :data -2
+                   :position 1}]
+          :data [1 -2 3]}
+         (definitions [1 -2 3]))))
