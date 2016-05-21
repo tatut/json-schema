@@ -19,10 +19,8 @@
         ;; no errors in "phoneNumber" because missing "code" in first item is not required
         (is (nil? (get-in e [:properties "phoneNumber"])))))
 
-    (testing "additional properties are reported"
-      (is (= {:error          :additional-properties
-              :property-names #{"youDidntExpectMe" "orMe"}}
-             (address-and-phone (p "address-and-phone-additional-properties.json")))))))
+    (testing "additional properties are ok"
+      (is (nil? (address-and-phone (p "address-and-phone-additional-properties.json")))))))
 
 (defvalidate ref-schema "person.schema.json")
 (deftest validate-referenced-schema
@@ -137,7 +135,8 @@
         errors (valid-array json)
         expected-errors {:error :properties,
                          :data {"things" ["value" "value" "value" "value"]}
-                         :properties {"things" {:error :duplicate-items-not-allowed}}}]
+                         :properties {"things" {:error :duplicate-items-not-allowed
+                                                :duplicates #{"value"}}}}]
     (is (= expected-errors errors))))
 
 (deftest validate-valid-array
@@ -166,7 +165,9 @@
 (defvalidate valid-date {"type" "object"
                          "properties" {"date" {"id" "http://jsonschema.net/date"
                                                "type" "string"
-                                               "format" "date-time"}}})
+                                               "format" "date-time"}}}
+  {:lax-date-time-format? true})
+
 (deftest validate-valid-date
   (let [json (cheshire/parse-string "{\"date\": \"2015-01-30T12:00:00Z\"}")
         errors (valid-date json)]
@@ -206,7 +207,7 @@
 (deftest validate-definitions
   (is (nil? (definitions [1 2 3])))
   (is (= {:error :array-items
-          :items [{:exclude true :minimum 0
+          :items [{:exclusive true :minimum 0
                    :error :out-of-bounds
                    :data -2
                    :position 1}]

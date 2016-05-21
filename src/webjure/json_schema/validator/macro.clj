@@ -155,11 +155,14 @@
 
 
 
-(defn validate-string-format [{format "format"} data error ok _]
+(defn validate-string-format [{format "format"} data error ok
+                              {lax-date-time-format? :lax-date-time-format?}]
   (when format
     (let [e (gensym "E")]
       `(if-let [~e (~(case format
-                       "date-time" format/validate-date-time
+                       "date-time" (if lax-date-time-format?
+                                     format/validate-lax-date-time
+                                     format/validate-date-time)
                        "hostname" format/validate-hostname
                        "ipv4" format/validate-ipv4
                        "ipv6" format/validate-ipv6
@@ -554,7 +557,10 @@
                    Default just tries to read it as a file via slurp and parse.
 
   :draft3-required  when set to true, support draft3 style required (in property definition),
-                    defaults to false"
+                    defaults to false
+
+  :lax-date-time-format?  when set to true, allow more variation in date format,
+                          normally only strict RFC3339 dates are valid"
   ([schema options]
    (let [schema (eval schema)
          options (merge {:ref-resolver resolve-ref}

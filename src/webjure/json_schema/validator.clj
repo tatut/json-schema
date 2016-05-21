@@ -118,10 +118,13 @@
        :pattern pattern
        :data data})))
 
-(defn validate-string-format [{format "format"} data _]
+(defn validate-string-format [{format "format"} data
+                              {lax-date-time-format? :lax-date-time-format?}]
   (when format
     ((case format
-       "date-time" format/validate-date-time
+       "date-time" (if lax-date-time-format?
+                     format/validate-lax-date-time
+                     format/validate-date-time)
        "hostname" format/validate-hostname
        "ipv4" format/validate-ipv4
        "ipv6" format/validate-ipv6
@@ -425,7 +428,20 @@
                   #'validate-properties #'validate-property-count
                   #'validate-array-items #'validate-array-item-count #'validate-array-unique-items])
 
-(defn validate [schema data options]
+(defn validate
+  "Validate data against the given schema.
+
+  An map of options can be given that supports the keys:
+  :ref-resolver    Function for loading referenced schemas. Takes in
+                   the schema URI and must return the schema parsed form.
+                   Default just tries to read it as a file via slurp and parse.
+
+  :draft3-required  when set to true, support draft3 style required (in property definition),
+                    defaults to false
+
+  :lax-date-time-format?  when set to true, allow more variation in date format,
+                          normally only strict RFC3339 dates are valid"
+  [schema data options]
   (let [schema (resolve-schema schema options)
         definitions (get schema "definitions")
         options (assoc options

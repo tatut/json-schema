@@ -1,5 +1,6 @@
 (ns webjure.json-schema.validator.format
-  (:require [clj-time.format :as time-format]))
+  (:require [clj-time.format :as time-format]
+            [clj-time.coerce :as time-coerce]))
 
 (def rfc3339-formatter (time-format/formatters :date-time))
 
@@ -25,6 +26,10 @@
     nil
     (catch Exception _
       {:error :wrong-format :expected :date-time :data d})))
+
+(defn validate-lax-date-time [d]
+  (when (nil? (time-coerce/from-string (str d)))
+    {:error :wrong-format :expected :date-time :data d}))
 
 (defn validate-hostname [d]
   (if (re-matches hostname-pattern (str d))
