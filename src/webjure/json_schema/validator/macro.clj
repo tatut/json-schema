@@ -161,13 +161,13 @@
     (let [e (gensym "E")]
       `(if-let [~e (~(case format
                        "date-time" (if lax-date-time-format?
-                                     format/validate-lax-date-time
-                                     format/validate-date-time)
-                       "hostname" format/validate-hostname
-                       "ipv4" format/validate-ipv4
-                       "ipv6" format/validate-ipv6
-                       "uri" format/validate-uri
-                       "email" format/validate-email
+                                     'webjure.json-schema.validator.format/validate-lax-date-time
+                                     'webjure.json-schema.validator.format/validate-date-time)
+                       "hostname" 'webjure.json-schema.validator.format/validate-hostname
+                       "ipv4" 'webjure.json-schema.validator.format/validate-ipv4
+                       "ipv6" 'webjure.json-schema.validator.format/validate-ipv6
+                       "uri" 'webjure.json-schema.validator.format/validate-uri
+                       "email" 'webjure.json-schema.validator.format/validate-email
                        (do
                          (println "WARNING: Unsupported format: " format)
                          `(constantly nil)))
@@ -537,12 +537,12 @@
   ([schema data options]
    (validate schema data identity (constantly nil) options))
   ([schema data error ok options]
-   (let [schema (resolve-schema schema options)
+   (let [options (assoc options
+                        :root-schema (or (:root-schema options)
+                                         (resolve-schema schema options)))
+         schema (resolve-schema schema options)
          e (gensym "E")
-         definitions (get schema "definitions")
-         options (assoc options
-                        :definitions (merge definitions
-                                            (:definitions options)))]
+         definitions (get schema "definitions")]
      `(or ~@(for [validate-fn validations
                   :let [form (validate-fn schema data error ok options)]
                   :when form]

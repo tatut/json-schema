@@ -19,12 +19,13 @@
                  (p schema)
                  schema)
         opts (or (first opts) {})]
-    `(fn [data#]
-       (let [fn-res# (validate ~schema data# ~opts)
-             macro-res# ((make-validator ~schema ~opts) data#)]
-         (is (= fn-res# macro-res#)
-             "function and macro versions validate in the same way")
-         macro-res#))))
+    `(let [macro-validator# (make-validator ~schema ~opts)]
+       (fn [data#]
+         (let [fn-res# (validate ~schema data# ~opts)
+               macro-res# (macro-validator# data#)]
+           (is (= fn-res# macro-res#)
+               "function and macro versions validate in the same way")
+           fn-res#)))))
 
 (defmacro defvalidate [name schema & opts]
   (let [schema (if (string? schema)

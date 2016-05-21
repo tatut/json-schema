@@ -12,6 +12,8 @@
                       "definitions.json"
 
                       ;; FIXME: create a resolver for these
+                      ;; the normal refs mostly work, but large linked
+                      ;; schema causes problems with the macros
                       "refRemote.json"
                       "ref.json"
                       })

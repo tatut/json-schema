@@ -1,9 +1,10 @@
 (ns webjure.json-schema.validator
   "Validator for JSON schema for draft 4"
-  (:require [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
-            [webjure.json-schema.validator.string :as string]
-            [webjure.json-schema.validator.format :as format]
-            [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [webjure.json-schema.ref :as ref :refer [resolve-ref resolve-schema]]
+            [webjure.json-schema.validator
+             [format :as format]
+             [string :as string]]))
 
 (declare validate)
 
@@ -442,9 +443,10 @@
   :lax-date-time-format?  when set to true, allow more variation in date format,
                           normally only strict RFC3339 dates are valid"
   [schema data options]
-  (let [schema (resolve-schema schema options)
-        definitions (get schema "definitions")
-        options (assoc options
-                       :definitions (merge definitions
-                                           (:definitions options)))]
+  (let [options (-> options
+                    (ref/root-schema schema)
+                    (assoc :ref-resolver (or (:ref-resolver options)
+                                             (memoize ref/resolve-ref))))
+        schema (resolve-schema schema options)
+        definitions (get schema "definitions")]
     (some #(% schema data options) validations)))
