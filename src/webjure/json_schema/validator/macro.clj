@@ -263,10 +263,9 @@
                           ~property-errors
 
                           ;; validate property by type
-                          (let [~e ~(validate property-schema v options)]
-                            (if ~e
-                              ~(error e)
-                              ~(ok))))))
+                          (if-let [~e ~(validate property-schema v options)]
+                            ~(error e)
+                            ~(ok)))))
 
                  ;; Validate pattern properties
                  ~@(for [[pattern schema] pattern-properties
@@ -372,36 +371,72 @@
            ~(error e))
          ~(ok)))))
 
-(defn validate-array-items [{item-schema "items" :as schema} data error ok options]
+(defn validate-array-items [{item-schema "items"
+                             additional-items "additionalItems" :as schema} data error ok options]
   (when item-schema
     (let [e (gensym "E")
           item (gensym "ITEM")
           item-error (gensym "ITEM-ERROR")]
       `(if-not (sequential? ~data)
          ~(ok)
-         (loop [errors# []
-                i# 0
-                [~item & items#] ~data]
-           (if-not ~item
-             (if (empty? errors#)
-               ~(ok)
-               (let [~e {:error :array-items
-                         :data  ~data
-                         :items errors#}]
-                 ~(error e)))
-             (let [item-error#
-                   ~(if (and (map? item-schema) (item-schema "enum"))
-                      (validate-enum-value item-schema item
-                                           identity
-                                           (constantly nil)
-                                           options)
-                      (validate item-schema item options))]
-               (recur (if item-error#
-                        (conj errors# (assoc item-error#
-                                             :position i#))
-                        errors#)
-                      (inc i#)
-                      items#))))))))
+         ~(cond
+            ;; Schema is a map: validate all items against it
+            (map? item-schema)
+            `(loop [errors# []
+                    i# 0
+                    [~item & items#] ~data]
+               (if-not ~item
+                 (if (empty? errors#)
+                   ~(ok)
+                   (let [~e {:error :array-items
+                             :data  ~data
+                             :items errors#}]
+                     ~(error e)))
+                 (let [item-error#
+                       ~(if (and (map? item-schema) (item-schema "enum"))
+                          (validate-enum-value item-schema item
+                                               identity
+                                               (constantly nil)
+                                               options)
+                          (validate item-schema item options))]
+                   (recur (if item-error#
+                            (conj errors# (assoc item-error#
+                                                 :position i#))
+                            errors#)
+                          (inc i#)
+                          items#))))
+
+            ;; Schema is an array, validate each index with its own schema
+            (sequential? item-schema)
+            `(if-let [~e (or
+                          (when (< (count ~data) ~(count item-schema))
+                            {:error :too-few-items
+                             :expected-item-count ~(count item-schema)
+                             :actual-item-count (count ~data)
+                             :data ~data})
+
+                          ~@(for [i (range (count item-schema))]
+                              `(let [~item (nth ~data ~i)]
+                                 ~(validate (nth item-schema i) item options)))
+
+                          ;; If additional items is false, don't allow more items
+                          ~@(when (false? additional-items)
+                              [`(when (> (count ~data) ~(count item-schema))
+                                  {:error :additional-items-not-allowed
+                                   :additional-items (drop ~(count item-schema) ~data)
+                                   :data ~data})])
+
+                          ;; If additional items is a schema, check each against it
+                          ~@(when (map? additional-items)
+                              [`(some (fn [~item]
+                                        (when-let [e# ~(validate additional-items item options)]
+                                          {:error :additional-item-does-not-match-schema
+                                           :item-error e#
+                                           :data ~data}))
+                                      (drop ~(count item-schema) ~data))])
+                          )]
+               ~(error e)
+               ~(ok)))))))
 
 (defn validate-array-item-count [{min-items "minItems" max-items "maxItems"} data error ok options]
   (when (or min-items max-items)
