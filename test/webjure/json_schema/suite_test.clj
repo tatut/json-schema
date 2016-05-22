@@ -5,7 +5,13 @@
              [webjure.json-schema.test-util :refer [validate-fn]]
              [clojure.java.io :as io]
              [cheshire.core :as cheshire]
-             [clojure.string :as str]))
+             [clojure.string :as str]
+             [webjure.json-schema.ref :as ref]))
+
+(defn ref-resolver [uri]
+  (ref/resolve-ref (str/replace uri
+                                "http://localhost:1234"
+                                "file:test/resources/JSON-Schema-Test-Suite/remotes/")))
 
 (def exclusions
   {;; Skip invalid definition in the schema
@@ -16,8 +22,11 @@
    "ref" {"root pointer ref" {:macro false}
           "remote ref, containing refs itself" {:macro false}}
 
-   ;; FIXME: start up an HTTP server for these
-   "refRemote" {:skip true}})
+   ;; Cheat (a little bit) here, change http URLs to file URIs so that
+   ;; we don't need to start an HTTP server. Clojure slurp works for
+   ;; both URI types the same.
+   "refRemote" {:options {:ref-resolver ref-resolver}}
+   })
 
 (def suite-tests
   (->> (io/file "test/resources/JSON-Schema-Test-Suite/tests/draft4")
@@ -35,14 +44,16 @@
   (let [schema-sym (gensym "SCHEMA")]
     `(do
        ~@(for [[test-name tests] suite-tests
+               :let [options (or (get-in exclusions [test-name :options]))]
                :when (not (:skip (exclusions test-name)))]
            `(deftest ~(sym (str "suite-" test-name))
               ~@(for [{desc "description"
                        schema "schema"
                        tests "tests"} tests
+                      :let [schema (ref/initialize-id-path schema)]
                       :when (not (:skip (get-in exclusions [test-name desc])))]
                   `(testing ~desc
-                     (let [~schema-sym (validate-fn ~schema {} ~(get-in exclusions [test-name desc]))]
+                     (let [~schema-sym (validate-fn ~schema ~options ~(get-in exclusions [test-name desc]))]
                        ~@(for [{desc "description"
                                 data "data"
                                 valid? "valid"} tests]

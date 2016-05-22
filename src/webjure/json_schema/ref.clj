@@ -3,9 +3,26 @@
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
+(defn initialize-id-path
+  "Recursively set the id path in the schema for subsequent reference loading."
+  ([schema] (initialize-id-path "" schema))
+  ([prefix schema]
+   (let [id-path (str prefix (get schema "id"))]
+     (with-meta (reduce-kv
+                 (fn [m k v]
+                   (assoc m k
+                          (if (map? v)
+                            (initialize-id-path id-path v)
+                            v)))
+                 {}
+                 schema)
+       {::id-path id-path}))))
+
 (defn resolve-ref [uri]
-  ;;(println "LOAD " uri)
-  (cheshire/parse-string (slurp uri)))
+  (-> uri
+      slurp
+      cheshire/parse-string
+      initialize-id-path))
 
 (def pointer-pattern #"^#/.*")
 (defn pointer? [ref]
@@ -55,14 +72,23 @@
 
         ;; URI, try to load it
         :default
-        (let [resolver (or (:ref-resolver options)
+        (let [id-path (::id-path (meta schema))
+              uri (str id-path ref)
+              fragment (.getFragment (java.net.URI. uri))
+              resolver (or (:ref-resolver options)
                            resolve-ref)
-              referenced-schema (resolver ref)]
-              (if-not referenced-schema
-                ;; Throw exception if schema can't be loaded
-                (throw (IllegalArgumentException.
-                        (str "Unable to resolve referenced schema: " ref)))
-                (recur referenced-schema referenced-schema)))))))
+              referenced-schema (resolver uri)
+              referenced-schema (if (str/blank? fragment)
+                                  referenced-schema
+                                  ;; If there was a fragment treat it as a
+                                  ;; $ref within the loaded document
+                                  (resolve-schema {"$ref" (str "#" fragment)}
+                                                  {:root-schema referenced-schema}))]
+          (if-not referenced-schema
+            ;; Throw exception if schema can't be loaded
+            (throw (IllegalArgumentException.
+                    (str "Unable to resolve referenced schema: " ref)))
+            (recur referenced-schema referenced-schema)))))))
 
 (defn root-schema [{root :root-schema :as options} schema]
   (if root
