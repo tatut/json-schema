@@ -6,6 +6,8 @@ how linked URIs are loaded.
 
 [![Clojars Project](http://clojars.org/webjure/json-schema/latest-version.svg)](http://clojars.org/webjure/json-schema)
 
+[![Build Status](https://travis-ci.org/tatut/json-schema.svg?branch=master)](https://travis-ci.org/tatut/json-schema)
+
 ## Status
 
 The project is tested against [JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite)
