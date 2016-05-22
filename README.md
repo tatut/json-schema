@@ -11,8 +11,13 @@ how linked URIs are loaded.
 The project is tested against [JSON-Schema-Test-Suite](https://github.com/json-schema-org/JSON-Schema-Test-Suite)
 and passes most of the tests.
 
-The macro version has problems with huge schemas (like loading the meta schema) as the generated
-code is too large for a single function.
+The macro version has problems with recursive and huge schemas.
+A schema that later links to itself with a "#" pointer causes an ever expanding
+macro expansion to take place and fails. That case requires a rethink of the
+macro version. The macro may also fail when the generated function would exceed
+the JVM limit on allowed code in a single method (64k).
+
+Currently there are 46 tests with 642 assertions.
 
 
 ## Usage
