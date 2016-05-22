@@ -1,4 +1,4 @@
-(defproject webjure/json-schema "0.7"
+(defproject webjure/json-schema "0.7.1"
   :description "Minimalistic JSON schema validator with $ref support."
   :url "https://github.com/tatut/json-schema"
   :license {:name "MIT License"
