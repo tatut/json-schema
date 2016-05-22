@@ -1,7 +1,8 @@
 (ns webjure.json-schema.ref
   (:require [cheshire.core :as cheshire]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str])
+  (:import (java.net URI URISyntaxException)))
 
 (defn initialize-id-path
   "Recursively set the id path in the schema for subsequent reference loading."
@@ -51,6 +52,12 @@
 (defn- ref? [schema]
   (contains? schema "$ref"))
 
+(defn- absolute? [uri]
+  (try
+    (.isAbsolute (URI. uri))
+    (catch URISyntaxException _
+      false)))
+
 (defn resolve-schema [schema options]
   (loop [schema schema
          root-schema (:root-schema options)]
@@ -73,8 +80,10 @@
         ;; URI, try to load it
         :default
         (let [id-path (::id-path (meta schema))
-              uri (str id-path ref)
-              fragment (.getFragment (java.net.URI. uri))
+              uri (if (absolute? ref)
+                    ref
+                    (str id-path ref))
+              fragment (.getFragment (URI. uri))
               resolver (or (:ref-resolver options)
                            resolve-ref)
               referenced-schema (resolver uri)
