@@ -19,7 +19,7 @@ macro expansion to take place and fails. That case requires a rethink of the
 macro version. The macro may also fail when the generated function would exceed
 the JVM limit on allowed code in a single method (64k).
 
-Currently there are 46 tests with 642 assertions.
+Currently there are 47 tests with 658 assertions.
 See [suite_test.clj](https://github.com/tatut/json-schema/blob/master/test/webjure/json_schema/suite_test.clj#L16) for
 a the list of tests in the JSON schema test suite that are skipped.
 
