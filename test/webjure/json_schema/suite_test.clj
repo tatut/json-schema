@@ -7,22 +7,22 @@
              [cheshire.core :as cheshire]
              [clojure.string :as str]))
 
-(def excluded-files #{;; creating a validator fails for an invalid definition
-                      ;; test this separately
-                      "definitions.json"
+(def exclusions
+  {;; Skip invalid definition in the schema
+   "definitions" {:skip true} ;; {"invalid definition" {:macro false :fn false}}
 
-                      ;; FIXME: create a resolver for these
-                      ;; the normal refs mostly work, but large linked
-                      ;; schema causes problems with the macros
-                      "refRemote.json"
-                      "ref.json"
-                      })
+   ;; Skip recursive schema in the macro version as it
+   ;; creates an ever expanding function (causing a stack overflow)
+   "ref" {"root pointer ref" {:macro false}
+          "remote ref, containing refs itself" {:macro false}}
+
+   ;; FIXME: start up an HTTP server for these
+   "refRemote" {:skip true}})
 
 (def suite-tests
   (->> (io/file "test/resources/JSON-Schema-Test-Suite/tests/draft4")
        file-seq
        (filter #(.endsWith (.getName %) ".json"))
-       (filter #(not (excluded-files (.getName %))))
        (mapv (juxt #(let [n (.getName %)]
                       (subs n 0 (- (count n) 5)))
                    #(cheshire/parse-string (slurp %))))
@@ -34,13 +34,15 @@
 (defmacro define-suite-tests []
   (let [schema-sym (gensym "SCHEMA")]
     `(do
-       ~@(for [[test-name tests] suite-tests]
+       ~@(for [[test-name tests] suite-tests
+               :when (not (:skip (exclusions test-name)))]
            `(deftest ~(sym (str "suite-" test-name))
               ~@(for [{desc "description"
                        schema "schema"
-                       tests "tests"} tests]
+                       tests "tests"} tests
+                      :when (not (:skip (get-in exclusions [test-name desc])))]
                   `(testing ~desc
-                     (let [~schema-sym (validate-fn ~schema {})]
+                     (let [~schema-sym (validate-fn ~schema {} ~(get-in exclusions [test-name desc]))]
                        ~@(for [{desc "description"
                                 data "data"
                                 valid? "valid"} tests]

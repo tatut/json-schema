@@ -38,7 +38,7 @@
   (loop [schema schema
          root-schema (:root-schema options)]
     (let [ref (get schema "$ref")]
-      ;;(println "RESOLVE-SCHEMA, ref: " ref ", schema: " schema ", root: " root-schema)
+      ;;(println "RESOLVE-SCHEMA, ref: " (pr-str ref) ", schema: " (pr-str schema) ", root: " (pr-str root-schema))
       (cond
 
         ;; No reference, return as is
@@ -68,4 +68,5 @@
   (if root
     options
     (assoc options
-           :root-schema (resolve-schema schema  options))))
+           :root-schema (or (resolve-schema schema options)
+                            schema))))

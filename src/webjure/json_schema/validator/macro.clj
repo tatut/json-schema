@@ -4,7 +4,8 @@
   (:require [webjure.json-schema.ref :refer [resolve-schema resolve-ref]]
             [webjure.json-schema.validator.string :as string]
             [webjure.json-schema.validator.format :as format]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [webjure.json-schema.ref :as ref]))
 
 
 (declare validate)
@@ -537,9 +538,7 @@
   ([schema data options]
    (validate schema data identity (constantly nil) options))
   ([schema data error ok options]
-   (let [options (assoc options
-                        :root-schema (or (:root-schema options)
-                                         (resolve-schema schema options)))
+   (let [options (ref/root-schema options schema)
          schema (resolve-schema schema options)
          e (gensym "E")
          definitions (get schema "definitions")]
@@ -563,8 +562,9 @@
                           normally only strict RFC3339 dates are valid"
   ([schema options]
    (let [schema (eval schema)
-         options (merge {:ref-resolver resolve-ref}
-                        (eval options))
+         options (-> (eval options)
+                     (assoc :ref-resolver (or (:ref-resolver options)
+                                              (memoize ref/resolve-ref))))
          data (gensym "DATA")]
      `(fn [~data]
         ~(validate schema data options)))))

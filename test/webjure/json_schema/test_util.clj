@@ -18,14 +18,30 @@
   (let [schema (if (string? schema)
                  (p schema)
                  schema)
-        opts (or (first opts) {})]
-    `(let [macro-validator# (make-validator ~schema ~opts)]
-       (fn [data#]
-         (let [fn-res# (validate ~schema data# ~opts)
-               macro-res# (macro-validator# data#)]
-           (is (= fn-res# macro-res#)
-               "function and macro versions validate in the same way")
-           fn-res#)))))
+        validation-opts (or (first opts) {})
+        test-opts (merge {:macro true :fn true}
+                         (second opts))
+        data (gensym "DATA")
+        macro-validator (gensym "MACRO-VALIDATOR")
+        fn-res (gensym "FN-RES")
+        macro-res (gensym "MACRO-RES")]
+    ;;(println "EXPAND TEST VALIDATOR FOR " (pr-str schema) " TEST-OPTS: " (pr-str test-opts))
+    `(let [~macro-validator ~(when (:macro test-opts)
+                               `(make-validator ~schema ~validation-opts))]
+       (fn [~data]
+         (let [~fn-res ~(when (:fn test-opts)
+                          `(validate ~schema ~data ~validation-opts))
+               ~macro-res ~(when (:macro test-opts)
+                             `(~macro-validator ~data))]
+           ~(when (and (:macro test-opts) (:fn test-opts))
+              `(is (= ~fn-res ~macro-res)
+                   "function and macro versions validate in the same way"))
+           ~(cond
+              (:fn test-opts)
+              fn-res
+
+              (:macro test-opts)
+              macro-res))))))
 
 (defmacro defvalidate [name schema & opts]
   (let [schema (if (string? schema)
