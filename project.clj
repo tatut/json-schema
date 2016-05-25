@@ -3,7 +3,7 @@
   :url "https://github.com/tatut/json-schema"
   :license {:name "MIT License"
             :url  "http://www.opensource.org/licenses/mit-license.php"}
-  :dependencies [[org.clojure/clojure "1.8.0"]
+  :dependencies [[org.clojure/clojure "1.9.0-alpha1"]
                  [cheshire "5.6.1"]
                  [clj-time "0.11.0"]]
   :source-paths ["src"]
