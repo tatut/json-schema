@@ -218,3 +218,12 @@
                    :position 1}]
           :data [1 -2 3]}
          (definitions [1 -2 3]))))
+
+(defvalidate format-or-null "format.schema.json")
+(deftest validate-format-not-checked-for-null
+  (is (nil? (format-or-null {"host" nil})))
+  (is (nil? (format-or-null {"host" "example.com"})))
+  (is (= {:error :wrong-format
+          :expected :hostname
+          :data "example.com 666"}
+         (get-in (format-or-null {"host" "example.com 666"}) [:properties "host"]))))
