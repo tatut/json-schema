@@ -180,7 +180,6 @@
                             pattern-properties "patternProperties"
                             additional-properties "additionalProperties"
                            :as        schema} data error ok options]
-
   (when (or properties additional-properties pattern-properties)
     (let [properties (or properties {})
           additional-properties (if (nil? additional-properties) {} additional-properties)
@@ -219,9 +218,9 @@
                          :let [error (fn [error]
                                        `(assoc ~property-errors ~property-name ~error))
                                ok (constantly property-errors)]]
-                     `(let [~v (get ~data ~property-name)]
-                        (if (nil? ~v)
-                          ;; nil values for required fields are checked earlier
+                     `(let [~v (get ~data ~property-name ::not-found)]
+                        (if (= ::not-found ~v)
+                          ;; not found for required fields is checked earlier
                           ~property-errors
 
                           ;; validate property by type
