@@ -20,7 +20,12 @@
         (is (nil? (get-in e [:properties "phoneNumber"])))))
 
     (testing "additional properties are ok"
-      (is (nil? (address-and-phone (p "address-and-phone-additional-properties.json")))))))
+      (is (nil? (address-and-phone (p "address-and-phone-additional-properties.json")))))
+
+    (testing "null required value is validated"
+      (is (= {:expected :string :error :wrong-type :data nil}
+             (get-in (address-and-phone (p "address-and-phone-null.json"))
+                     [:properties "address" :properties "city"]))))))
 
 (defvalidate ref-schema "person.schema.json")
 (deftest validate-referenced-schema
