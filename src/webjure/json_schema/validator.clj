@@ -172,9 +172,9 @@
                 (merge property-errors
                        (into {}
                              (keep (fn [[property-name property-schema]]
-                                     (let [v (get data property-name)]
-                                       (when-not (nil? v)
-                                         ;; nil values for required fields are checked earlier
+                                     (let [v (get data property-name ::not-found)]
+                                       (when (not= ::not-found v)
+                                         ;; not found  values for required fields are checked earlier
                                          (when-let [e (validate property-schema v options)]
                                            [property-name e])))))
                              properties))
