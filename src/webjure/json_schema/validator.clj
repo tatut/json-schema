@@ -121,7 +121,7 @@
 
 (defn validate-string-format [{format "format"} data
                               {lax-date-time-format? :lax-date-time-format?}]
-  (when format
+  (when (and format data)
     ((case format
        "date-time" (if lax-date-time-format?
                      format/validate-lax-date-time

@@ -160,19 +160,20 @@
                               {lax-date-time-format? :lax-date-time-format?}]
   (when format
     (let [e (gensym "E")]
-      `(if-let [~e (~(case format
-                       "date-time" (if lax-date-time-format?
-                                     'webjure.json-schema.validator.format/validate-lax-date-time
-                                     'webjure.json-schema.validator.format/validate-date-time)
-                       "hostname" 'webjure.json-schema.validator.format/validate-hostname
-                       "ipv4" 'webjure.json-schema.validator.format/validate-ipv4
-                       "ipv6" 'webjure.json-schema.validator.format/validate-ipv6
-                       "uri" 'webjure.json-schema.validator.format/validate-uri
-                       "email" 'webjure.json-schema.validator.format/validate-email
-                       (do
-                         (println "WARNING: Unsupported format: " format)
-                         `(constantly nil)))
-                    ~data)]
+      `(if-let [~e (when ~data
+                     (~(case format
+                         "date-time" (if lax-date-time-format?
+                                       'webjure.json-schema.validator.format/validate-lax-date-time
+                                       'webjure.json-schema.validator.format/validate-date-time)
+                         "hostname" 'webjure.json-schema.validator.format/validate-hostname
+                         "ipv4" 'webjure.json-schema.validator.format/validate-ipv4
+                         "ipv6" 'webjure.json-schema.validator.format/validate-ipv6
+                         "uri" 'webjure.json-schema.validator.format/validate-uri
+                         "email" 'webjure.json-schema.validator.format/validate-email
+                         (do
+                           (println "WARNING: Unsupported format: " format)
+                           `(constantly nil)))
+                      ~data))]
          ~(error e)
          ~(ok)))))
 
