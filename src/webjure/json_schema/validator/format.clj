@@ -60,7 +60,7 @@
 
 (defn validate-uri [d]
   (let [d (str d)]
-    (if-not (and (.contains d "/")
+    (if-not (and (.contains d ":")
                  (try
                    (java.net.URI. d)
                    true

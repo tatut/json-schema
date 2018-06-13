@@ -20,12 +20,22 @@
    ;; Skip recursive schema in the macro version as it
    ;; creates an ever expanding function (causing a stack overflow)
    "ref" {"root pointer ref" {:macro false}
-          "remote ref, containing refs itself" {:macro false}}
+          "remote ref, containing refs itself" {:macro false}
+          "Recursive references between schemas" {:skip true}
+          :options {:ref-resolver ref-resolver}}
+
+   ;; We don't have a regex for a regex
+   "ecmascript-regex" {:skip true}
 
    ;; Cheat (a little bit) here, change http URLs to file URIs so that
    ;; we don't need to start an HTTP server. Clojure slurp works for
    ;; both URI types the same.
-   "refRemote" {:options {:ref-resolver ref-resolver}}
+   "refRemote" {"base URI change - change folder" {:skip true}
+                "base URI change - change folder in subschema" {:skip true}
+                "root ref in remote ref" {:skip true}
+                :options {:ref-resolver ref-resolver}}
+
+   "format" {"validation of date-time strings" {"a valid date-time string without second fraction" {:skip true}}}
    })
 
 (def suite-tests
@@ -44,24 +54,25 @@
   (let [schema-sym (gensym "SCHEMA")]
     `(do
        ~@(for [[test-name tests] suite-tests
-               :let [options (or (get-in exclusions [test-name :options]))]
+               :let [options (or (get-in exclusions [test-name :options]) {})]
                :when (not (:skip (exclusions test-name)))]
            `(deftest ~(sym (str "suite-" test-name))
               ~@(for [{desc "description"
                        schema "schema"
                        tests "tests"} tests
-                      :let [schema (ref/initialize-id-path schema)]
+                      :let [schema (ref/initialize-id-path schema)
+                            options (merge options (get-in exclusions [test-name desc :options]))]
                       :when (not (:skip (get-in exclusions [test-name desc])))]
                   `(testing ~desc
                      (let [~schema-sym (validate-fn ~schema ~options ~(get-in exclusions [test-name desc]))]
-                       ~@(for [{desc "description"
+                       ~@(for [{test-desc "description"
                                 data "data"
-                                valid? "valid"} tests]
+                                valid? "valid"} tests
+                               :when (not (:skip (get-in exclusions [test-name desc test-desc])))]
                            (if valid?
                              `(is (nil? (~schema-sym ~data))
-                                  ~(str "Test '" desc "' should be valid"))
+                                  ~(str "Test '" test-desc "' should be valid"))
                              `(is (~schema-sym ~data)
-                                  ~(str "Test '" desc "' should NOT be valid"))))))))))))
-
+                                  ~(str "Test '" test-desc "' should NOT be valid"))))))))))))
 
 (define-suite-tests)

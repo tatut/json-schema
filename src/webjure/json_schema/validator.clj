@@ -302,18 +302,19 @@
 
           ;; Schema is an array, validate each index with its own schema
           (sequential? item-schema)
-          (or (and (< c (count item-schema))
+          (or #_(and (< c (count item-schema))
                    {:error :too-few-items
                     :expected-item-count (count item-schema)
                     :actual-item-count c
                     :data data})
 
               (first
-               (for [i (range (count item-schema))
-                     :let [item (nth data i)
-                           e (validate (nth item-schema i) item options)]
-                     :when e]
-                 e))
+               (let [items (count data)]
+                 (for [i (range (count item-schema))
+                       :let [e (when (> items i)
+                                 (validate (nth item-schema i) (nth data i) options))]
+                       :when e]
+                   e)))
 
               ;; If additional items is false, don't allow more items
               (and (false? additional-items)
@@ -388,10 +389,12 @@
   "Validate match against any of the given schemas."
   [{any-of "anyOf"} data options]
   (when-not (empty? any-of)
-    (when-not (some #(nil? (validate % data options)) any-of)
-      {:error :does-not-match-any-of
-       :any-of any-of
-       :data data})))
+    (let [errors (mapv #(validate % data options) any-of)]
+      (when-not (some nil? errors)
+        {:error :does-not-match-any-of
+         :any-of any-of
+         :data data
+         :errors errors}))))
 
 (defn validate-one-of
   "Validate match against one (and only one) of the given schemas."

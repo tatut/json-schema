@@ -156,7 +156,7 @@
 
 
 
-(defn validate-string-format [{format "format"} data error ok
+(defn validate-string-format [{format "format" :as schema} data error ok
                               {lax-date-time-format? :lax-date-time-format?}]
   (when format
     (let [e (gensym "E")]
@@ -171,7 +171,7 @@
                          "uri" 'webjure.json-schema.validator.format/validate-uri
                          "email" 'webjure.json-schema.validator.format/validate-email
                          (do
-                           (println "WARNING: Unsupported format: " format)
+                           (println "WARNING: Unsupported format: " format " in schema: " schema)
                            `(constantly nil)))
                       ~data))]
          ~(error e)
@@ -337,6 +337,7 @@
                              additional-items "additionalItems" :as schema} data error ok options]
   (when item-schema
     (let [e (gensym "E")
+          c (gensym "C")
           item (gensym "ITEM")
           item-error (gensym "ITEM-ERROR")]
       `(if-not (sequential? ~data)
@@ -370,35 +371,37 @@
 
             ;; Schema is an array, validate each index with its own schema
             (sequential? item-schema)
-            `(if-let [~e (or
-                          (when (< (count ~data) ~(count item-schema))
-                            {:error :too-few-items
-                             :expected-item-count ~(count item-schema)
-                             :actual-item-count (count ~data)
-                             :data ~data})
+            `(let [~c (count ~data)]
+               (if-let [~e (or
+                            #_(when (< (count ~data) ~(count item-schema))
+                                {:error :too-few-items
+                                 :expected-item-count ~(count item-schema)
+                                 :actual-item-count (count ~data)
+                                 :data ~data})
 
-                          ~@(for [i (range (count item-schema))]
-                              `(let [~item (nth ~data ~i)]
-                                 ~(validate (nth item-schema i) item options)))
+                            ~@(for [i (range (count item-schema))]
+                                `(when (> ~c ~i)
+                                   (let [~item (nth ~data ~i)]
+                                     ~(validate (nth item-schema i) item options))))
 
-                          ;; If additional items is false, don't allow more items
-                          ~@(when (false? additional-items)
-                              [`(when (> (count ~data) ~(count item-schema))
-                                  {:error :additional-items-not-allowed
-                                   :additional-items (drop ~(count item-schema) ~data)
-                                   :data ~data})])
+                            ;; If additional items is false, don't allow more items
+                            ~@(when (false? additional-items)
+                                [`(when (> ~c ~(count item-schema))
+                                    {:error :additional-items-not-allowed
+                                     :additional-items (drop ~(count item-schema) ~data)
+                                     :data ~data})])
 
-                          ;; If additional items is a schema, check each against it
-                          ~@(when (map? additional-items)
-                              [`(some (fn [~item]
-                                        (when-let [e# ~(validate additional-items item options)]
-                                          {:error :additional-item-does-not-match-schema
-                                           :item-error e#
-                                           :data ~data}))
-                                      (drop ~(count item-schema) ~data))])
-                          )]
-               ~(error e)
-               ~(ok)))))))
+                            ;; If additional items is a schema, check each against it
+                            ~@(when (map? additional-items)
+                                [`(some (fn [~item]
+                                          (when-let [e# ~(validate additional-items item options)]
+                                            {:error :additional-item-does-not-match-schema
+                                             :item-error e#
+                                             :data ~data}))
+                                        (drop ~(count item-schema) ~data))])
+                            )]
+                 ~(error e)
+                 ~(ok))))))))
 
 (defn validate-array-item-count [{min-items "minItems" max-items "maxItems"} data error ok options]
   (when (or min-items max-items)
@@ -477,14 +480,15 @@
   [{any-of "anyOf"} data error ok options]
   (when-not (empty? any-of)
     (let [e (gensym "E")]
-      `(if-not (or
-                ~@(for [schema any-of]
-                    `(nil? ~(validate schema data options))))
-         (let [~e {:error :does-not-match-any-of
-                   :any-of ~any-of
-                   :data ~data}]
-           ~(error e))
-         ~(ok)))))
+      `(let [errors# [~@(for [schema any-of]
+                          (validate schema data options))]]
+         (if (some nil? errors#)
+           ~(ok)
+           (let [~e {:error :does-not-match-any-of
+                     :any-of ~any-of
+                     :data ~data
+                     :errors errors#}]
+             ~(error e)))))))
 
 (defn validate-one-of
   "Validate match against one (and only one) of the given schemas."
